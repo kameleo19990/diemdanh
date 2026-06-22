@@ -75,8 +75,17 @@
 
     /* Live camera */
     #reader {
-      width: 100%; max-width: 320px; aspect-ratio: 1;
+      width: 100%; max-width: 320px;
+      height: 320px;                      /* iOS không hiểu aspect-ratio tốt */
       border-radius: 12px; overflow: hidden; position: relative; background: #000;
+      -webkit-transform: translateZ(0);   /* Buộc GPU layer trên Safari */
+    }
+    #reader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      position: absolute !important;
+      top: 0 !important; left: 0 !important;
     }
     .aim-overlay {
       position: absolute; inset: 0; pointer-events: none; z-index: 10;
@@ -429,6 +438,11 @@
       function(){}
     ).then(function() {
       setStatus('active', 'Sẵn sàng quét');
+      // Ép video play trên iOS Safari (fix màn hình đen)
+      setTimeout(function() {
+        var vid = document.querySelector('#reader video');
+        if (vid) { vid.setAttribute('playsinline', ''); vid.play().catch(function(){}); }
+      }, 500);
     }).catch(function() {
       switchToCaptureMode();
     });
