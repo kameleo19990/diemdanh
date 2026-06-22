@@ -196,7 +196,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v4-iframe</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v5-post</p>
   </header>
 
   <div id="toast"></div>
@@ -356,7 +356,7 @@
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS qua iframe ẩn (đi theo redirect → ghi sheet) ──
+  // ── Gọi API GAS qua fetch POST no-cors (cách chuẩn của Google) ──
   function guiDiemDanh(maHS) {
     isProcessing = true;
     setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
@@ -366,35 +366,26 @@
       hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
     });
 
-    var url = GAS_API_URL
-      + '?action=diemDanh&maHS=' + encodeURIComponent(maHS)
-      + '&t=' + Date.now();   // chống cache
-
-    var iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-
-    var done = false;
-    function ghiNhanThanhCong() {
-      if (done) return;
-      done = true;
+    // POST với text/plain = "simple request" → không bị preflight CORS
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ maHS: maHS })
+    })
+    .then(function() {
+      // doPost đã chạy và ghi sheet
       isProcessing = false;
       sessionSet[maHS] = true;
       addToSessionList(maHS, thoiGian);
-      showToast('✓ Đã lưu: ' + maHS, 'success');   // [v4-iframe]
+      showToast('✓ Đã lưu: ' + maHS, 'success');   // [v5-post]
       setStatus('active', 'Sẵn sàng quét');
-      // dọn iframe sau 2s để chắc chắn request đã hoàn tất
-      setTimeout(function() {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 2000);
-    }
-
-    // iframe load xong googleusercontent (doGet đã chạy, sheet đã ghi)
-    iframe.onload = ghiNhanThanhCong;
-    // dự phòng: dù sao sau 6s cũng coi như xong
-    setTimeout(ghiNhanThanhCong, 6000);
-
-    iframe.src = url;
-    document.body.appendChild(iframe);
+    })
+    .catch(function() {
+      isProcessing = false;
+      showToast('✗ Mất kết nối internet', 'fail');
+      setStatus('error', 'Mất kết nối');
+    });
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
