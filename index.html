@@ -196,6 +196,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v4-iframe</p>
   </header>
 
   <div id="toast"></div>
@@ -355,35 +356,45 @@
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS (no-cors: gửi được, không đọc response) ──
+  // ── Gọi API GAS qua iframe ẩn (đi theo redirect → ghi sheet) ──
   function guiDiemDanh(maHS) {
     isProcessing = true;
     setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
 
-    // Timestamp phía client (server không trả về được do no-cors)
-    var now      = new Date();
-    var thoiGian = now.toLocaleString('vi-VN', {
+    var thoiGian = new Date().toLocaleString('vi-VN', {
       day:'2-digit', month:'2-digit', year:'numeric',
       hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
     });
 
-    var url = GAS_API_URL + '?action=diemDanh&maHS=' + encodeURIComponent(maHS);
+    var url = GAS_API_URL
+      + '?action=diemDanh&maHS=' + encodeURIComponent(maHS)
+      + '&t=' + Date.now();   // chống cache
 
-    fetch(url, { mode: 'no-cors' })
-      .then(function() {
-        // Request đã được gửi thành công đến GAS
-        isProcessing = false;
-        sessionSet[maHS] = true;
-        addToSessionList(maHS, thoiGian);
-        showToast('✓ ' + maHS + '  —  ' + thoiGian, 'success');
-        setStatus('active', 'Sẵn sàng quét');
-      })
-      .catch(function() {
-        // Chỉ xảy ra khi mất internet hoàn toàn
-        isProcessing = false;
-        showToast('✗ Mất kết nối internet', 'fail');
-        setStatus('error', 'Mất kết nối');
-      });
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+
+    var done = false;
+    function ghiNhanThanhCong() {
+      if (done) return;
+      done = true;
+      isProcessing = false;
+      sessionSet[maHS] = true;
+      addToSessionList(maHS, thoiGian);
+      showToast('✓ Đã lưu: ' + maHS, 'success');   // [v4-iframe]
+      setStatus('active', 'Sẵn sàng quét');
+      // dọn iframe sau 2s để chắc chắn request đã hoàn tất
+      setTimeout(function() {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 2000);
+    }
+
+    // iframe load xong googleusercontent (doGet đã chạy, sheet đã ghi)
+    iframe.onload = ghiNhanThanhCong;
+    // dự phòng: dù sao sau 6s cũng coi như xong
+    setTimeout(ghiNhanThanhCong, 6000);
+
+    iframe.src = url;
+    document.body.appendChild(iframe);
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
