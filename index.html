@@ -50,6 +50,22 @@
     }
     #btn-save-url:hover { background: #00b894; }
 
+    /* Nút lưu vào sheet (batch) */
+    #btn-luu-sheet {
+      display: none;
+      width: 100%; max-width: 380px;
+      background: #00d4aa; color: #0f0f13;
+      border: none; border-radius: 14px;
+      padding: 16px; font-size: 1.05rem; font-weight: 800;
+      cursor: pointer; transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 4px 20px #00d4aa33;
+    }
+    #btn-luu-sheet:active { background: #00b894; transform: scale(0.98); }
+    .hint-chua-luu {
+      font-size: 0.72rem; color: #f59e0b; text-align: center;
+      max-width: 380px;
+    }
+
     /* ── Main UI (ẩn khi chưa config) ── */
     #main-ui { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
 
@@ -196,7 +212,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v7-form</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v8-batch</p>
   </header>
 
   <div id="toast"></div>
@@ -222,6 +238,11 @@
         <span class="counter-label">Quét trùng</span>
       </div>
     </div>
+
+    <button id="btn-luu-sheet" onclick="luuVaoSheet()">⬆ Lưu vào Sheet</button>
+    <p class="hint-chua-luu" id="hint-chua-luu" style="display:none">
+      Các mã đã quét đang lưu tạm trong máy. Bấm "Lưu vào Sheet" để ghi lên Google Sheet.
+    </p>
 
     <div class="scanner-card">
       <span class="scanner-label" id="mode-label">Camera quét mã QR</span>
@@ -297,9 +318,9 @@
 
   // ── Trạng thái buổi học ───────────────────────────────────
   var sessionSet   = {};
+  var pendingList  = [];     // các mã đã quét, chờ lưu lên sheet
   var scanCount    = 0;
   var dupCount     = 0;
-  var isProcessing = false;
   var lastRawCode  = '';
   var cooldownMs   = 2000;
   var toastTimer   = null;
@@ -312,12 +333,43 @@
   var modeLabel   = document.getElementById('mode-label');
   var countEl     = document.getElementById('count-scanned');
   var dupEl       = document.getElementById('count-dup');
+  var btnLuu      = document.getElementById('btn-luu-sheet');
+  var hintChuaLuu = document.getElementById('hint-chua-luu');
 
   // Hiện ngày
   (function() {
     document.getElementById('header-date').textContent =
       new Date().toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
   })();
+
+  // ── Xử lý khi quay lại từ trang lưu (?saved=N) ────────────
+  (function xuLyQuayLai() {
+    var params = new URLSearchParams(location.search);
+    if (params.has('saved')) {
+      var n = params.get('saved');
+      try { localStorage.removeItem('pendingList'); } catch (e) {}
+      pendingList = [];
+      history.replaceState({}, '', location.pathname);
+      setTimeout(function() {
+        showToast('✓ Đã lưu ' + n + ' học sinh vào Sheet!', 'success');
+      }, 700);
+    }
+  })();
+
+  // ── Lưu / khôi phục danh sách tạm ─────────────────────────
+  function luuPending() {
+    try { localStorage.setItem('pendingList', JSON.stringify(pendingList)); } catch (e) {}
+  }
+  function capNhatNutLuu() {
+    if (pendingList.length > 0) {
+      btnLuu.style.display = 'block';
+      btnLuu.textContent = '⬆ Lưu ' + pendingList.length + ' học sinh vào Sheet';
+      hintChuaLuu.style.display = 'block';
+    } else {
+      btnLuu.style.display = 'none';
+      hintChuaLuu.style.display = 'none';
+    }
+  }
 
   // ── Helpers ───────────────────────────────────────────────
   function showToast(msg, type) {
@@ -347,81 +399,45 @@
 
   // ── Buổi mới ─────────────────────────────────────────────
   function batDauBuoiMoi() {
-    if (scanCount > 0 && !confirm('Bắt đầu buổi mới sẽ xóa danh sách (' + scanCount + ' HS). Tiếp tục?')) return;
-    sessionSet = {}; scanCount = 0; dupCount = 0;
+    if (pendingList.length > 0 && !confirm('Còn ' + pendingList.length + ' HS chưa lưu lên Sheet. Bắt đầu buổi mới sẽ xóa hết. Tiếp tục?')) return;
+    sessionSet = {}; pendingList = []; scanCount = 0; dupCount = 0;
+    try { localStorage.removeItem('pendingList'); } catch (e) {}
     countEl.textContent = '0'; dupEl.textContent = '0';
     sessionList.innerHTML = '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
     emptyMsgEl = document.getElementById('empty-msg');
+    capNhatNutLuu();
     setStatus('active', 'Sẵn sàng quét');
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS qua Form POST → iframe → postMessage ──
-  // Qua mặt ITP của iOS Safari (form submit là điều hướng, không bị chặn)
-  // và đọc được xác nhận THẬT từ server qua postMessage.
+  // ── Lưu tạm mã quét (KHÔNG gọi mạng — iOS chặn request ngầm) ──
   function guiDiemDanh(maHS) {
-    isProcessing = true;
-    setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
+    var thoiGian = new Date().toLocaleString('vi-VN', {
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
+    });
+    sessionSet[maHS] = true;
+    pendingList.push(maHS);
+    luuPending();
+    addToSessionList(maHS, thoiGian + ' (chưa lưu)');
+    showToast('✓ Đã quét: ' + maHS, 'success');
+    setStatus('active', 'Sẵn sàng quét');
+    capNhatNutLuu();
+  }
 
-    var done       = false;
-    var iframeName = 'sink_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  // ── Gửi cả lô lên Google Sheet (điều hướng top-level) ──────
+  function luuVaoSheet() {
+    if (pendingList.length === 0) return;
+    if (!confirm('Lưu ' + pendingList.length + ' học sinh lên Google Sheet?')) return;
 
-    var iframe = document.createElement('iframe');
-    iframe.name = iframeName;
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
+    var returnUrl = location.origin + location.pathname;
+    var url = GAS_API_URL
+      + '?action=batch'
+      + '&codes=' + encodeURIComponent(pendingList.join(','))
+      + '&returnUrl=' + encodeURIComponent(returnUrl);
 
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = GAS_API_URL;
-    form.target = iframeName;
-    form.style.display = 'none';
-
-    var inp = document.createElement('input');
-    inp.type  = 'hidden';
-    inp.name  = 'maHS';
-    inp.value = maHS;
-    form.appendChild(inp);
-    document.body.appendChild(form);
-
-    function cleanup() {
-      window.removeEventListener('message', onMessage);
-      setTimeout(function() {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-        if (form.parentNode)   form.parentNode.removeChild(form);
-      }, 1000);
-    }
-
-    function finish(res) {
-      if (done) return; done = true;
-      cleanup();
-      isProcessing = false;
-      if (res && res.success) {
-        sessionSet[res.maHS] = true;
-        addToSessionList(res.maHS, res.thoiGian);   // giờ THẬT từ server
-        showToast('✓ Đã lưu: ' + res.maHS, 'success');   // [v7-form]
-        setStatus('active', 'Sẵn sàng quét');
-      } else {
-        showToast('✗ ' + (res ? res.message : 'Lỗi không xác định'), 'fail');
-        setStatus('error', 'Lỗi — thử lại');
-      }
-    }
-
-    // Nhận xác nhận thật từ trang doPost trả về
-    function onMessage(ev) {
-      var res;
-      try { res = JSON.parse(ev.data); } catch (e) { return; }
-      if (res && typeof res.success !== 'undefined') finish(res);
-    }
-    window.addEventListener('message', onMessage);
-
-    // An toàn: 15s không phản hồi coi như lỗi
-    setTimeout(function() {
-      if (done) return;
-      finish({ success: false, message: 'Hết thời gian chờ' });
-    }, 15000);
-
-    form.submit();
+    setStatus('busy', 'Đang lưu lên Sheet…');
+    // Điều hướng trực tiếp — cách duy nhất chạy được trên iPhone
+    window.location.href = url;
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
@@ -438,7 +454,6 @@
       showToast('⚠ ' + maHS + ' đã điểm danh rồi!', 'warn');
       return;
     }
-    if (isProcessing) return;
     guiDiemDanh(maHS);
   }
 
@@ -488,6 +503,24 @@
       switchToCaptureMode();
     });
   }
+
+  // ── Khôi phục danh sách tạm nếu lỡ tải lại trang ──────────
+  (function khoiPhucPending() {
+    var saved;
+    try { saved = localStorage.getItem('pendingList'); } catch (e) {}
+    if (!saved) return;
+    var list;
+    try { list = JSON.parse(saved); } catch (e) { return; }
+    if (!list || !list.length) return;
+
+    pendingList = list;
+    for (var i = 0; i < list.length; i++) {
+      sessionSet[list[i]] = true;
+      addToSessionList(list[i], '(chưa lưu)');
+    }
+    capNhatNutLuu();
+    showToast('Đã khôi phục ' + list.length + ' mã chưa lưu', 'warn');
+  })();
 
   // Tự khởi động nếu đã có URL
   if (GAS_API_URL) { khoiDongScanner(); }
