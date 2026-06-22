@@ -196,7 +196,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v5-post</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v6-jsonp</p>
   </header>
 
   <div id="toast"></div>
@@ -356,36 +356,58 @@
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS qua fetch POST no-cors (cách chuẩn của Google) ──
+  // ── Gọi API GAS qua JSONP (đọc được phản hồi THẬT từ server) ──
   function guiDiemDanh(maHS) {
     isProcessing = true;
     setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
 
-    var thoiGian = new Date().toLocaleString('vi-VN', {
-      day:'2-digit', month:'2-digit', year:'numeric',
-      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
-    });
+    var cbName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    var script = document.createElement('script');
+    var done   = false;
 
-    // POST với text/plain = "simple request" → không bị preflight CORS
-    fetch(GAS_API_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ maHS: maHS })
-    })
-    .then(function() {
-      // doPost đã chạy và ghi sheet
+    function cleanup() {
+      try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    // Callback chỉ chạy khi server thực sự trả về kết quả
+    window[cbName] = function(res) {
+      if (done) return; done = true;
+      cleanup();
       isProcessing = false;
-      sessionSet[maHS] = true;
-      addToSessionList(maHS, thoiGian);
-      showToast('✓ Đã lưu: ' + maHS, 'success');   // [v5-post]
-      setStatus('active', 'Sẵn sàng quét');
-    })
-    .catch(function() {
+      if (res && res.success) {
+        sessionSet[res.maHS] = true;
+        addToSessionList(res.maHS, res.thoiGian);   // giờ THẬT từ server
+        showToast('✓ Đã lưu: ' + res.maHS, 'success');   // [v6-jsonp]
+        setStatus('active', 'Sẵn sàng quét');
+      } else {
+        showToast('✗ ' + (res ? res.message : 'Lỗi không xác định'), 'fail');
+        setStatus('error', 'Lỗi — thử lại');
+      }
+    };
+
+    script.onerror = function() {
+      if (done) return; done = true;
+      cleanup();
       isProcessing = false;
-      showToast('✗ Mất kết nối internet', 'fail');
-      setStatus('error', 'Mất kết nối');
-    });
+      showToast('✗ Không gọi được máy chủ', 'fail');
+      setStatus('error', 'Lỗi kết nối');
+    };
+
+    // An toàn: 15s không phản hồi coi như lỗi
+    setTimeout(function() {
+      if (done) return; done = true;
+      cleanup();
+      isProcessing = false;
+      showToast('✗ Hết thời gian chờ', 'fail');
+      setStatus('error', 'Timeout');
+    }, 15000);
+
+    script.src = GAS_API_URL
+      + '?action=diemDanh&maHS=' + encodeURIComponent(maHS)
+      + '&callback=' + cbName
+      + '&t=' + Date.now();
+    document.head.appendChild(script);
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
