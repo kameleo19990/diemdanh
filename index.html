@@ -355,51 +355,35 @@
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS qua JSONP (tránh CORS trên Safari iOS) ───
+  // ── Gọi API GAS (no-cors: gửi được, không đọc response) ──
   function guiDiemDanh(maHS) {
     isProcessing = true;
     setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
 
-    var cbName = '_cb' + Date.now();
-    var script  = document.createElement('script');
-    var timer   = setTimeout(function() {
-      cleanup();
-      isProcessing = false;
-      showToast('✗ Hết thời gian chờ, thử lại', 'fail');
-      setStatus('error', 'Timeout — thử lại');
-    }, 12000);
+    // Timestamp phía client (server không trả về được do no-cors)
+    var now      = new Date();
+    var thoiGian = now.toLocaleString('vi-VN', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
+    });
 
-    function cleanup() {
-      clearTimeout(timer);
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
+    var url = GAS_API_URL + '?action=diemDanh&maHS=' + encodeURIComponent(maHS);
 
-    window[cbName] = function(res) {
-      cleanup();
-      isProcessing = false;
-      if (res && res.success) {
-        sessionSet[res.maHS] = true;
-        addToSessionList(res.maHS, res.thoiGian);
-        showToast('✓ ' + res.maHS + '  —  ' + res.thoiGian, 'success');
+    fetch(url, { mode: 'no-cors' })
+      .then(function() {
+        // Request đã được gửi thành công đến GAS
+        isProcessing = false;
+        sessionSet[maHS] = true;
+        addToSessionList(maHS, thoiGian);
+        showToast('✓ ' + maHS + '  —  ' + thoiGian, 'success');
         setStatus('active', 'Sẵn sàng quét');
-      } else {
-        showToast('✗ ' + (res ? res.message : 'Lỗi không xác định'), 'fail');
-        setStatus('error', 'Lỗi — thử lại');
-      }
-    };
-
-    script.onerror = function() {
-      cleanup();
-      isProcessing = false;
-      showToast('✗ Không kết nối được máy chủ', 'fail');
-      setStatus('error', 'Lỗi kết nối');
-    };
-
-    script.src = GAS_API_URL
-      + '?action=diemDanh&maHS=' + encodeURIComponent(maHS)
-      + '&callback=' + cbName;
-    document.head.appendChild(script);
+      })
+      .catch(function() {
+        // Chỉ xảy ra khi mất internet hoàn toàn
+        isProcessing = false;
+        showToast('✗ Mất kết nối internet', 'fail');
+        setStatus('error', 'Mất kết nối');
+      });
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
