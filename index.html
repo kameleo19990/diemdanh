@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Điểm Danh Học Sinh</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0f13;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 40px;
+      gap: 20px;
+    }
+
+    header { text-align: center; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
+    header p  { margin-top: 4px; font-size: 0.85rem; color: #6b7280; }
+
+    /* ── Config card (hiện khi chưa có URL) ── */
+    #config-card {
+      background: #1a1a24;
+      border: 1px solid #f59e0b55;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    #config-card h2 { font-size: 0.85rem; color: #fcd34d; display: flex; align-items: center; gap: 6px; }
+    #config-card p  { font-size: 0.8rem; color: #9ca3af; line-height: 1.5; }
+    #gas-url-input {
+      width: 100%; padding: 10px 12px;
+      background: #111118; border: 1px solid #2a2a3a;
+      border-radius: 8px; color: #e0e0e0; font-size: 0.82rem;
+      outline: none;
+    }
+    #gas-url-input:focus { border-color: #00d4aa; }
+    #btn-save-url {
+      background: #00d4aa; color: #0f0f13;
+      border: none; border-radius: 8px;
+      padding: 10px; font-size: 0.88rem; font-weight: 700;
+      cursor: pointer; transition: background 0.2s;
+    }
+    #btn-save-url:hover { background: #00b894; }
+
+    /* ── Main UI (ẩn khi chưa config) ── */
+    #main-ui { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
+
+    /* Counter */
+    .counter-row { display: flex; gap: 12px; width: 100%; max-width: 380px; }
+    .counter-box {
+      flex: 1; background: #1a1a24; border: 1px solid #2a2a3a;
+      border-radius: 14px; padding: 14px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .counter-box.highlight { border-color: #00d4aa33; background: #0d2420; }
+    .counter-num   { font-size: 2rem; font-weight: 800; color: #00d4aa; line-height: 1; }
+    .counter-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Scanner card */
+    .scanner-card {
+      background: #1a1a24; border: 1px solid #2a2a3a;
+      border-radius: 16px; padding: 20px;
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    .scanner-label { font-size: 0.8rem; color: #9ca3af; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    /* Live camera */
+    #reader {
+      width: 100%; max-width: 320px; aspect-ratio: 1;
+      border-radius: 12px; overflow: hidden; position: relative; background: #000;
+    }
+    .aim-overlay {
+      position: absolute; inset: 0; pointer-events: none; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .aim-box { width: 56%; height: 56%; position: relative; }
+    .aim-box::before, .aim-box::after, .aim-box span::before, .aim-box span::after {
+      content: ''; position: absolute; width: 22px; height: 22px;
+      border-color: #00d4aa; border-style: solid;
+    }
+    .aim-box::before      { top:0;    left:0;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .aim-box::after       { top:0;    right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .aim-box span::before { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .aim-box span::after  { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+    .scan-line {
+      position: absolute; left:0; right:0; height:2px; top:0;
+      background: linear-gradient(90deg, transparent, #00d4aa, transparent);
+      animation: scanMove 2s linear infinite;
+    }
+    @keyframes scanMove {
+      0%   { top:0%;   opacity:0; } 10% { opacity:1; }
+      90%  { opacity:1; }           100%{ top:100%; opacity:0; }
+    }
+
+    /* Capture fallback */
+    #capture-mode { display:none; flex-direction:column; align-items:center; gap:16px; width:100%; }
+    .capture-icon {
+      width:110px; height:110px; border-radius:50%;
+      background:#111118; border:2px dashed #2a2a3a;
+      display:flex; align-items:center; justify-content:center; font-size:2.8rem;
+    }
+    .capture-hint { font-size:0.82rem; color:#6b7280; text-align:center; line-height:1.5; }
+    #capture-btn {
+      display:inline-flex; align-items:center; gap:10px;
+      background:#00d4aa; color:#0f0f13; border:none; border-radius:10px;
+      padding:14px 28px; font-size:0.95rem; font-weight:700; cursor:pointer;
+      transition:background 0.2s, transform 0.1s;
+      width:100%; max-width:280px; justify-content:center;
+    }
+    #capture-btn:active { background:#00b894; transform:scale(0.97); }
+    #qr-file-input { display:none; }
+
+    /* Status */
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#9ca3af; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#374151; flex-shrink:0; transition:background 0.3s; }
+    .dot.active { background:#00d4aa; box-shadow:0 0 6px #00d4aa88; }
+    .dot.busy   { background:#f59e0b; box-shadow:0 0 6px #f59e0b88; }
+    .dot.error  { background:#ef4444; box-shadow:0 0 6px #ef444488; }
+
+    /* Toast */
+    #toast {
+      position:fixed; top:20px; left:50%;
+      transform:translateX(-50%) translateY(-80px);
+      padding:12px 22px; border-radius:10px;
+      font-size:0.88rem; font-weight:600;
+      z-index:999; opacity:0; pointer-events:none;
+      max-width:90vw; text-align:center;
+      transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
+    }
+    #toast.show    { transform:translateX(-50%) translateY(0); opacity:1; }
+    #toast.success { background:#064e3b; border:1px solid #00d4aa; color:#6ee7b7; }
+    #toast.fail    { background:#450a0a; border:1px solid #ef4444; color:#fca5a5; }
+    #toast.warn    { background:#451a03; border:1px solid #f59e0b; color:#fcd34d; }
+
+    /* Session list */
+    .session-card {
+      background:#1a1a24; border:1px solid #2a2a3a;
+      border-radius:16px; padding:16px 20px;
+      width:100%; max-width:380px;
+    }
+    .session-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .session-header h2 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:#6b7280; }
+    .session-actions { display:flex; gap:8px; }
+    .btn-ghost {
+      background:none; border:1px solid #374151; border-radius:7px;
+      padding:5px 10px; font-size:0.75rem; color:#9ca3af;
+      cursor:pointer; transition:border-color 0.2s, color 0.2s;
+    }
+    .btn-ghost:hover       { border-color:#6b7280; color:#e0e0e0; }
+    .btn-ghost.danger:hover{ border-color:#ef4444; color:#f87171; }
+
+    #session-list {
+      list-style:none; display:flex; flex-direction:column; gap:8px;
+      max-height:320px; overflow-y:auto;
+    }
+    #session-list::-webkit-scrollbar      { width:4px; }
+    #session-list::-webkit-scrollbar-track{ background:transparent; }
+    #session-list::-webkit-scrollbar-thumb{ background:#2a2a3a; border-radius:2px; }
+
+    #session-list li {
+      display:flex; justify-content:space-between; align-items:center;
+      background:#111118; border-radius:8px; padding:10px 14px;
+      font-size:0.85rem; animation:slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { opacity:0; transform:translateY(-5px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .item-left  { display:flex; align-items:center; gap:10px; }
+    .item-index { font-size:0.72rem; color:#374151; min-width:22px; }
+    .item-ma    { font-weight:700; color:#a5f3fc; }
+    .item-time  { color:#6b7280; font-size:0.78rem; }
+    .empty-msg  { text-align:center; color:#374151; font-size:0.82rem; padding:12px 0; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Điểm Danh Học Sinh</h1>
+    <p id="header-date"></p>
+  </header>
+
+  <div id="toast"></div>
+
+  <!-- Bước cấu hình URL (chỉ hiện lần đầu) -->
+  <div id="config-card">
+    <h2>⚙ Cấu hình lần đầu</h2>
+    <p>Dán URL Apps Script đã deploy vào ô bên dưới. Chỉ cần làm một lần, ứng dụng sẽ ghi nhớ.</p>
+    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+    <button id="btn-save-url" onclick="luuCauHinh()">Lưu và bắt đầu</button>
+  </div>
+
+  <!-- Giao diện chính -->
+  <div id="main-ui">
+
+    <div class="counter-row">
+      <div class="counter-box highlight">
+        <span class="counter-num" id="count-scanned">0</span>
+        <span class="counter-label">Đã điểm danh</span>
+      </div>
+      <div class="counter-box">
+        <span class="counter-num" id="count-dup" style="color:#f59e0b">0</span>
+        <span class="counter-label">Quét trùng</span>
+      </div>
+    </div>
+
+    <div class="scanner-card">
+      <span class="scanner-label" id="mode-label">Camera quét mã QR</span>
+
+      <div id="reader">
+        <div class="aim-overlay">
+          <div class="aim-box"><span></span><div class="scan-line"></div></div>
+        </div>
+      </div>
+
+      <div id="capture-mode">
+        <div class="capture-icon">📷</div>
+        <p class="capture-hint">Nhấn nút để mở camera,<br>chụp ảnh mã QR của học sinh</p>
+        <button id="capture-btn" onclick="document.getElementById('qr-file-input').click()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          Chụp mã QR
+        </button>
+        <input type="file" id="qr-file-input" accept="image/*" capture="environment" />
+      </div>
+
+      <div class="status-row">
+        <div class="dot" id="status-dot"></div>
+        <span id="status-text">Đang khởi động…</span>
+      </div>
+    </div>
+
+    <div class="session-card">
+      <div class="session-header">
+        <h2>Danh sách buổi học</h2>
+        <div class="session-actions">
+          <button class="btn-ghost" onclick="doiCauHinh()" title="Đổi URL GAS">⚙</button>
+          <button class="btn-ghost danger" onclick="batDauBuoiMoi()">↺ Buổi mới</button>
+        </div>
+      </div>
+      <ul id="session-list">
+        <li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>
+      </ul>
+    </div>
+
+  </div><!-- /main-ui -->
+
+<script>
+  // ── Cấu hình ──────────────────────────────────────────────
+  var GAS_API_URL = localStorage.getItem('gasUrl') || '';
+
+  function luuCauHinh() {
+    var url = document.getElementById('gas-url-input').value.trim();
+    if (!url || !url.startsWith('https://script.google.com')) {
+      alert('URL không hợp lệ. Phải là URL script.google.com.');
+      return;
+    }
+    localStorage.setItem('gasUrl', url);
+    GAS_API_URL = url;
+    document.getElementById('config-card').style.display = 'none';
+    document.getElementById('main-ui').style.display     = 'flex';
+    khoiDongScanner();
+  }
+
+  function doiCauHinh() {
+    localStorage.removeItem('gasUrl');
+    document.getElementById('config-card').style.display = '';
+    document.getElementById('main-ui').style.display     = 'none';
+  }
+
+  // Nếu đã có URL, bỏ qua màn hình config
+  if (GAS_API_URL) {
+    document.getElementById('config-card').style.display = 'none';
+    document.getElementById('main-ui').style.display     = 'flex';
+  }
+
+  // ── Trạng thái buổi học ───────────────────────────────────
+  var sessionSet   = {};
+  var scanCount    = 0;
+  var dupCount     = 0;
+  var isProcessing = false;
+  var lastRawCode  = '';
+  var cooldownMs   = 2000;
+  var toastTimer   = null;
+  var emptyMsgEl   = document.getElementById('empty-msg');
+
+  var dot         = document.getElementById('status-dot');
+  var statusText  = document.getElementById('status-text');
+  var toast       = document.getElementById('toast');
+  var sessionList = document.getElementById('session-list');
+  var modeLabel   = document.getElementById('mode-label');
+  var countEl     = document.getElementById('count-scanned');
+  var dupEl       = document.getElementById('count-dup');
+
+  // Hiện ngày
+  (function() {
+    document.getElementById('header-date').textContent =
+      new Date().toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
+  })();
+
+  // ── Helpers ───────────────────────────────────────────────
+  function showToast(msg, type) {
+    toast.textContent = msg;
+    toast.className   = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toast.className = ''; }, 3000);
+  }
+  function setStatus(state, text) {
+    dot.className = 'dot ' + state;
+    statusText.textContent = text;
+  }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function addToSessionList(maHS, thoiGian) {
+    if (emptyMsgEl) { emptyMsgEl.remove(); emptyMsgEl = null; }
+    scanCount++;
+    countEl.textContent = scanCount;
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<span class="item-left"><span class="item-index">' + scanCount + '.</span>' +
+      '<span class="item-ma">' + escHtml(maHS) + '</span></span>' +
+      '<span class="item-time">' + escHtml(thoiGian) + '</span>';
+    sessionList.insertBefore(li, sessionList.firstChild);
+  }
+
+  // ── Buổi mới ─────────────────────────────────────────────
+  function batDauBuoiMoi() {
+    if (scanCount > 0 && !confirm('Bắt đầu buổi mới sẽ xóa danh sách (' + scanCount + ' HS). Tiếp tục?')) return;
+    sessionSet = {}; scanCount = 0; dupCount = 0;
+    countEl.textContent = '0'; dupEl.textContent = '0';
+    sessionList.innerHTML = '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
+    emptyMsgEl = document.getElementById('empty-msg');
+    setStatus('active', 'Sẵn sàng quét');
+    showToast('Đã bắt đầu buổi học mới', 'success');
+  }
+
+  // ── Gọi API GAS qua fetch ─────────────────────────────────
+  function guiDiemDanh(maHS) {
+    isProcessing = true;
+    setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
+
+    var url = GAS_API_URL + '?action=diemDanh&maHS=' + encodeURIComponent(maHS);
+
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        isProcessing = false;
+        if (res && res.success) {
+          sessionSet[res.maHS] = true;
+          addToSessionList(res.maHS, res.thoiGian);
+          showToast('✓ ' + res.maHS + '  —  ' + res.thoiGian, 'success');
+          setStatus('active', 'Sẵn sàng quét');
+        } else {
+          showToast('✗ ' + (res ? res.message : 'Lỗi không xác định'), 'fail');
+          setStatus('error', 'Lỗi — thử lại');
+        }
+      })
+      .catch(function() {
+        isProcessing = false;
+        showToast('✗ Không kết nối được máy chủ', 'fail');
+        setStatus('error', 'Lỗi kết nối');
+      });
+  }
+
+  // ── Xử lý mã quét ────────────────────────────────────────
+  function onScanSuccess(decodedText) {
+    var maHS = decodedText.trim();
+    if (!maHS) return;
+    if (maHS === lastRawCode) return;
+    lastRawCode = maHS;
+    setTimeout(function() { if (lastRawCode === maHS) lastRawCode = ''; }, cooldownMs);
+
+    if (sessionSet[maHS]) {
+      dupCount++;
+      dupEl.textContent = dupCount;
+      showToast('⚠ ' + maHS + ' đã điểm danh rồi!', 'warn');
+      return;
+    }
+    if (isProcessing) return;
+    guiDiemDanh(maHS);
+  }
+
+  // ── Capture mode fallback ─────────────────────────────────
+  function switchToCaptureMode() {
+    document.getElementById('reader').style.display       = 'none';
+    document.getElementById('capture-mode').style.display = 'flex';
+    modeLabel.textContent = 'Chụp ảnh mã QR';
+    setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+  }
+
+  var html5QrCode = new Html5Qrcode('reader');
+
+  document.getElementById('qr-file-input').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    setStatus('busy', 'Đang nhận diện mã QR…');
+    html5QrCode.scanFile(file, false)
+      .then(function(r) { onScanSuccess(r); })
+      .catch(function() {
+        showToast('✗ Không nhận ra mã QR, thử lại', 'fail');
+        setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+      });
+  });
+
+  // ── Khởi động scanner ─────────────────────────────────────
+  function khoiDongScanner() {
+    html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 15,
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.55; return {width:s,height:s}; },
+        aspectRatio: 1.0,
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+      },
+      onScanSuccess,
+      function(){}
+    ).then(function() {
+      setStatus('active', 'Sẵn sàng quét');
+    }).catch(function() {
+      switchToCaptureMode();
+    });
+  }
+
+  // Tự khởi động nếu đã có URL
+  if (GAS_API_URL) { khoiDongScanner(); }
+</script>
+</body>
+</html>
