@@ -262,8 +262,8 @@
 
   function luuCauHinh() {
     var url = document.getElementById('gas-url-input').value.trim();
-    if (!url || !url.startsWith('https://script.google.com')) {
-      alert('URL không hợp lệ. Phải là URL script.google.com.');
+    if (!url || !url.startsWith('https://')) {
+      alert('URL không hợp lệ. Phải bắt đầu bằng https://');
       return;
     }
     localStorage.setItem('gasUrl', url);
