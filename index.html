@@ -196,7 +196,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v6-jsonp</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v7-form</p>
   </header>
 
   <div id="toast"></div>
@@ -356,58 +356,72 @@
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Gọi API GAS qua JSONP (đọc được phản hồi THẬT từ server) ──
+  // ── Gọi API GAS qua Form POST → iframe → postMessage ──
+  // Qua mặt ITP của iOS Safari (form submit là điều hướng, không bị chặn)
+  // và đọc được xác nhận THẬT từ server qua postMessage.
   function guiDiemDanh(maHS) {
     isProcessing = true;
     setStatus('busy', 'Đang ghi nhận: ' + maHS + '…');
 
-    var cbName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-    var script = document.createElement('script');
-    var done   = false;
+    var done       = false;
+    var iframeName = 'sink_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+
+    var iframe = document.createElement('iframe');
+    iframe.name = iframeName;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = GAS_API_URL;
+    form.target = iframeName;
+    form.style.display = 'none';
+
+    var inp = document.createElement('input');
+    inp.type  = 'hidden';
+    inp.name  = 'maHS';
+    inp.value = maHS;
+    form.appendChild(inp);
+    document.body.appendChild(form);
 
     function cleanup() {
-      try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
-      if (script.parentNode) script.parentNode.removeChild(script);
+      window.removeEventListener('message', onMessage);
+      setTimeout(function() {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        if (form.parentNode)   form.parentNode.removeChild(form);
+      }, 1000);
     }
 
-    // Callback chỉ chạy khi server thực sự trả về kết quả
-    window[cbName] = function(res) {
+    function finish(res) {
       if (done) return; done = true;
       cleanup();
       isProcessing = false;
       if (res && res.success) {
         sessionSet[res.maHS] = true;
         addToSessionList(res.maHS, res.thoiGian);   // giờ THẬT từ server
-        showToast('✓ Đã lưu: ' + res.maHS, 'success');   // [v6-jsonp]
+        showToast('✓ Đã lưu: ' + res.maHS, 'success');   // [v7-form]
         setStatus('active', 'Sẵn sàng quét');
       } else {
         showToast('✗ ' + (res ? res.message : 'Lỗi không xác định'), 'fail');
         setStatus('error', 'Lỗi — thử lại');
       }
-    };
+    }
 
-    script.onerror = function() {
-      if (done) return; done = true;
-      cleanup();
-      isProcessing = false;
-      showToast('✗ Không gọi được máy chủ', 'fail');
-      setStatus('error', 'Lỗi kết nối');
-    };
+    // Nhận xác nhận thật từ trang doPost trả về
+    function onMessage(ev) {
+      var res;
+      try { res = JSON.parse(ev.data); } catch (e) { return; }
+      if (res && typeof res.success !== 'undefined') finish(res);
+    }
+    window.addEventListener('message', onMessage);
 
     // An toàn: 15s không phản hồi coi như lỗi
     setTimeout(function() {
-      if (done) return; done = true;
-      cleanup();
-      isProcessing = false;
-      showToast('✗ Hết thời gian chờ', 'fail');
-      setStatus('error', 'Timeout');
+      if (done) return;
+      finish({ success: false, message: 'Hết thời gian chờ' });
     }, 15000);
 
-    script.src = GAS_API_URL
-      + '?action=diemDanh&maHS=' + encodeURIComponent(maHS)
-      + '&callback=' + cbName
-      + '&t=' + Date.now();
-    document.head.appendChild(script);
+    form.submit();
   }
 
   // ── Xử lý mã quét ────────────────────────────────────────
