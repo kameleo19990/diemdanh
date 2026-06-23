@@ -244,7 +244,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v13-fast</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v14-opt</p>
   </header>
 
   <div id="toast"></div>
@@ -365,7 +365,7 @@
   var scanCount    = 0;
   var dupCount     = 0;
   var lastRawCode  = '';
-  var cooldownMs   = 1000;
+  var cooldownMs   = 400;   // giảm từ 1000 để quét liên tục nhanh hơn
   var toastTimer   = null;
   var emptyMsgEl   = document.getElementById('empty-msg');
 
@@ -617,6 +617,7 @@
 
   // ── Khởi động scanner ─────────────────────────────────────
   function khoiDongScanner() {
+    try { html5QrCode.stop(); } catch (e) {}  // stop trước nếu đang chạy từ lần cũ
     html5QrCode.start(
       { facingMode: 'environment' },                // cấu hình tối giản — luôn chạy được
       {
