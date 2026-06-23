@@ -244,7 +244,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v16</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v17</p>
   </header>
 
   <div id="toast"></div>
@@ -619,11 +619,10 @@
   function khoiDongScanner() {
     try { html5QrCode.stop(); } catch (e) {}  // stop trước nếu đang chạy từ lần cũ
     html5QrCode.start(
-      { facingMode: 'environment' },                // cấu hình tối giản — luôn chạy được
+      { facingMode: 'environment' },
       {
-        fps: 12,                                    // fps vừa phải — không quá nặng
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.85; return {width:s,height:s}; }, // vùng quét 85%
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+        fps: 8,                                     // giảm fps để xử lý tốt hơn
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.95; return {width:s,height:s}; } // vùng quét 95%
       },
       onScanSuccess,
       function(){}
