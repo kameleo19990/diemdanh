@@ -66,6 +66,30 @@
       max-width: 380px;
     }
 
+    /* Thẻ "Còn thiếu" */
+    #card-thieu {
+      display: none;
+      width: 100%; max-width: 380px;
+      background: #1a1a24; border: 1px solid #ef444455;
+      border-radius: 16px; padding: 16px 20px;
+    }
+    #card-thieu h2 {
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #f87171; margin-bottom: 10px;
+    }
+    #list-thieu { display: flex; flex-wrap: wrap; gap: 6px; }
+    #list-thieu .chip {
+      background: #2a1414; border: 1px solid #ef444433;
+      color: #fca5a5; border-radius: 6px;
+      padding: 5px 10px; font-size: 0.8rem;
+    }
+    #list-thieu .done-all { color: #00d4aa; font-size: 0.85rem; padding: 6px 0; }
+    .btn-tai-ds {
+      background: none; border: 1px dashed #374151; border-radius: 8px;
+      color: #9ca3af; padding: 5px 10px; font-size: 0.72rem; cursor: pointer;
+    }
+    .btn-tai-ds:hover { border-color: #00d4aa; color: #00d4aa; }
+
     /* ── Main UI (ẩn khi chưa config) ── */
     #main-ui { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
 
@@ -212,7 +236,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v8-batch</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v9-thieu</p>
   </header>
 
   <div id="toast"></div>
@@ -243,6 +267,14 @@
     <p class="hint-chua-luu" id="hint-chua-luu" style="display:none">
       Các mã đã quét đang lưu tạm trong máy. Bấm "Lưu vào Sheet" để ghi lên Google Sheet.
     </p>
+
+    <div id="card-thieu">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        <span id="thieu-title">Còn thiếu</span>
+        <button class="btn-tai-ds" onclick="taiDanhSachLop()">↻ Tải lại DS lớp</button>
+      </h2>
+      <div id="list-thieu"></div>
+    </div>
 
     <div class="scanner-card">
       <span class="scanner-label" id="mode-label">Camera quét mã QR</span>
@@ -301,6 +333,7 @@
     GAS_API_URL = url;
     document.getElementById('config-card').style.display = 'none';
     document.getElementById('main-ui').style.display     = 'flex';
+    capNhatThieu();
     khoiDongScanner();
   }
 
@@ -319,6 +352,7 @@
   // ── Trạng thái buổi học ───────────────────────────────────
   var sessionSet   = {};
   var pendingList  = [];     // các mã đã quét, chờ lưu lên sheet
+  var classList    = [];     // danh sách lớp [{ma, ten}] để tính vắng
   var scanCount    = 0;
   var dupCount     = 0;
   var lastRawCode  = '';
@@ -342,9 +376,16 @@
       new Date().toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
   })();
 
-  // ── Xử lý khi quay lại từ trang lưu (?saved=N) ────────────
+  // Tải danh sách lớp đã lưu trong máy
+  try {
+    var clSaved = localStorage.getItem('classList');
+    if (clSaved) classList = JSON.parse(clSaved) || [];
+  } catch (e) { classList = []; }
+
+  // ── Xử lý khi quay lại từ trang lưu / tải danh sách ───────
   (function xuLyQuayLai() {
     var params = new URLSearchParams(location.search);
+
     if (params.has('saved')) {
       var n = params.get('saved');
       try { localStorage.removeItem('pendingList'); } catch (e) {}
@@ -354,7 +395,50 @@
         showToast('✓ Đã lưu ' + n + ' học sinh vào Sheet!', 'success');
       }, 700);
     }
+
+    if (params.has('ds')) {
+      try {
+        classList = JSON.parse(params.get('ds')) || [];
+        localStorage.setItem('classList', JSON.stringify(classList));
+        setTimeout(function() {
+          showToast('📋 Đã tải DS lớp: ' + classList.length + ' học sinh', 'success');
+        }, 500);
+      } catch (e) {}
+      history.replaceState({}, '', location.pathname);
+    }
   })();
+
+  // ── Tải danh sách lớp (điều hướng top-level) ──────────────
+  function taiDanhSachLop() {
+    var returnUrl = location.origin + location.pathname;
+    window.location.href = GAS_API_URL
+      + '?action=loadDS&returnUrl=' + encodeURIComponent(returnUrl);
+  }
+
+  // ── Cập nhật thẻ "Còn thiếu" ──────────────────────────────
+  function capNhatThieu() {
+    var card  = document.getElementById('card-thieu');
+    var list  = document.getElementById('list-thieu');
+    var title = document.getElementById('thieu-title');
+    card.style.display = 'block';
+
+    if (!classList.length) {
+      title.textContent = 'Danh sách lớp';
+      list.innerHTML = '<button class="btn-tai-ds" style="font-size:0.85rem;padding:10px 16px" '
+        + 'onclick="taiDanhSachLop()">📥 Tải danh sách lớp để xem ai còn thiếu</button>';
+      return;
+    }
+
+    var absent = classList.filter(function(s) { return !sessionSet[s.ma]; });
+    title.textContent = 'Còn thiếu (' + absent.length + '/' + classList.length + ')';
+    if (absent.length === 0) {
+      list.innerHTML = '<div class="done-all">✓ Đã quét đủ cả lớp!</div>';
+    } else {
+      list.innerHTML = absent.map(function(s) {
+        return '<span class="chip">' + escHtml(s.ten || s.ma) + '</span>';
+      }).join('');
+    }
+  }
 
   // ── Lưu / khôi phục danh sách tạm ─────────────────────────
   function luuPending() {
@@ -406,6 +490,7 @@
     sessionList.innerHTML = '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
     emptyMsgEl = document.getElementById('empty-msg');
     capNhatNutLuu();
+    capNhatThieu();
     setStatus('active', 'Sẵn sàng quét');
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
@@ -422,6 +507,7 @@
     showToast('✓ Đã quét: ' + maHS, 'success');
     setStatus('active', 'Sẵn sàng quét');
     capNhatNutLuu();
+    capNhatThieu();
   }
 
   // ── Gửi cả lô lên Google Sheet (điều hướng top-level) ──────
@@ -521,6 +607,9 @@
     capNhatNutLuu();
     showToast('Đã khôi phục ' + list.length + ' mã chưa lưu', 'warn');
   })();
+
+  // Hiện thẻ "Còn thiếu" ngay khi mở app
+  capNhatThieu();
 
   // Tự khởi động nếu đã có URL
   if (GAS_API_URL) { khoiDongScanner(); }
