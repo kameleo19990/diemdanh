@@ -244,7 +244,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v17</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v19-pro</p>
   </header>
 
   <div id="toast"></div>
@@ -317,6 +317,7 @@
       <div class="session-header">
         <h2>Danh sách buổi học</h2>
         <div class="session-actions">
+          <button class="btn-ghost" onclick="inQR()" title="In mã QR">🖨</button>
           <button class="btn-ghost" onclick="doiCauHinh()" title="Đổi URL GAS">⚙</button>
           <button class="btn-ghost danger" onclick="batDauBuoiMoi()">↺ Buổi mới</button>
         </div>
@@ -350,6 +351,14 @@
     localStorage.removeItem('gasUrl');
     document.getElementById('config-card').style.display = '';
     document.getElementById('main-ui').style.display     = 'none';
+  }
+
+  function inQR() {
+    if (!GAS_API_URL) {
+      alert('Chưa cấu hình URL. Vui lòng cấu hình trước.');
+      return;
+    }
+    window.open(GAS_API_URL + '?action=inQR', '_blank');
   }
 
   // Nếu đã có URL, bỏ qua màn hình config
@@ -619,10 +628,11 @@
   function khoiDongScanner() {
     try { html5QrCode.stop(); } catch (e) {}  // stop trước nếu đang chạy từ lần cũ
     html5QrCode.start(
-      { facingMode: 'environment' },
+      { facingMode: 'environment', focusMode: 'continuous' },  // liên tục lấy nét cho iPhone
       {
-        fps: 8,                                     // giảm fps để xử lý tốt hơn
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.95; return {width:s,height:s}; } // vùng quét 95%
+        fps: 15,                                    // tốc độ tối ưu — đủ mượt không đơ Safari
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.85; return {width:s,height:s}; }, // vùng quét 85%
+        disableFlip: false                          // cho phép lật hình nếu cần
       },
       onScanSuccess,
       function(){}
