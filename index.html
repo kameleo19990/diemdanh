@@ -620,8 +620,8 @@
     html5QrCode.start(
       { facingMode: 'environment' },                // cấu hình tối giản — luôn chạy được
       {
-        fps: 20,                                    // giảm fps để mượt hơn
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.8; return {width:s,height:s}; }, // vùng quét 80%
+        fps: 10,                                    // fps tối thiểu — quét nhanh mượt
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.75; return {width:s,height:s}; }, // vùng quét 75%
         aspectRatio: 1.0,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
       },
