@@ -244,7 +244,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v12-fast</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v13-fast</p>
   </header>
 
   <div id="toast"></div>
@@ -618,11 +618,7 @@
   // ── Khởi động scanner ─────────────────────────────────────
   function khoiDongScanner() {
     html5QrCode.start(
-      {
-        facingMode: 'environment',
-        width:  { ideal: 1280 },                    // độ nét cao → đọc QR từ xa
-        height: { ideal: 720 }
-      },
+      { facingMode: 'environment' },                // cấu hình tối giản — luôn chạy được
       {
         fps: 30,                                    // quét cực nhanh để lia camera
         qrbox: function(w,h){ var s=Math.min(w,h)*0.9; return {width:s,height:s}; }, // vùng quét ~toàn khung
@@ -633,10 +629,23 @@
       function(){}
     ).then(function() {
       setStatus('active', 'Sẵn sàng quét');
-      // Ép video play trên iOS Safari (fix màn hình đen)
       setTimeout(function() {
         var vid = document.querySelector('#reader video');
-        if (vid) { vid.setAttribute('playsinline', ''); vid.play().catch(function(){}); }
+        if (vid) {
+          // Ép video play trên iOS Safari (fix màn hình đen)
+          vid.setAttribute('playsinline', '');
+          vid.play().catch(function(){});
+          // Thử NÂNG độ phân giải sau khi camera đã chạy (lỗi cũng không sao)
+          try {
+            if (vid.srcObject) {
+              var tracks = vid.srcObject.getVideoTracks();
+              if (tracks && tracks[0] && tracks[0].applyConstraints) {
+                tracks[0].applyConstraints({ width: { ideal: 1280 }, height: { ideal: 720 } })
+                  .catch(function(){});
+              }
+            }
+          } catch (e) {}
+        }
       }, 500);
     }).catch(function() {
       switchToCaptureMode();
