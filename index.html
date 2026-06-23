@@ -2,339 +2,701 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Điểm Danh Học Sinh</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!--
+    Thư viện jsQR v1.4.0:
+    - Detect QR trực tiếp từ ImageData (canvas pixel), không phụ thuộc SDK camera
+    - Hoạt động ổn định trên iOS Safari, Android Chrome
+    - ~50KB, không cần dependency
+  -->
+  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Reset & base ──────────────────────────────────────── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       background: #0f0f13;
       color: #e0e0e0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 28px 16px 40px;
+      padding: 28px 16px 80px;
       gap: 20px;
     }
 
-    header { text-align: center; }
-    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
-    header p  { margin-top: 4px; font-size: 0.85rem; color: #6b7280; }
+    /* ── Header ──────────────────────────────────────────── */
+    header {
+      text-align: center;
+      user-select: none;
+    }
 
-    /* ── Config card (hiện khi chưa có URL) ── */
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #ffffff;
+    }
+
+    header .sub-date {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    header .version {
+      margin-top: 2px;
+      font-size: 0.68rem;
+      color: #374151;
+    }
+
+    /* ── Config card (chỉ hiện lần đầu chưa có URL) ──────── */
     #config-card {
       background: #1a1a24;
       border: 1px solid #f59e0b55;
       border-radius: 16px;
       padding: 20px;
-      width: 100%; max-width: 380px;
-      display: flex; flex-direction: column; gap: 12px;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
-    #config-card h2 { font-size: 0.85rem; color: #fcd34d; display: flex; align-items: center; gap: 6px; }
-    #config-card p  { font-size: 0.8rem; color: #9ca3af; line-height: 1.5; }
-    #gas-url-input {
-      width: 100%; padding: 10px 12px;
-      background: #111118; border: 1px solid #2a2a3a;
-      border-radius: 8px; color: #e0e0e0; font-size: 0.82rem;
-      outline: none;
-    }
-    #gas-url-input:focus { border-color: #00d4aa; }
-    #btn-save-url {
-      background: #00d4aa; color: #0f0f13;
-      border: none; border-radius: 8px;
-      padding: 10px; font-size: 0.88rem; font-weight: 700;
-      cursor: pointer; transition: background 0.2s;
-    }
-    #btn-save-url:hover { background: #00b894; }
 
-    /* Nút lưu vào sheet (batch) */
-    #btn-luu-sheet {
-      display: none;
-      width: 100%; max-width: 380px;
-      background: #00d4aa; color: #0f0f13;
-      border: none; border-radius: 14px;
-      padding: 16px; font-size: 1.05rem; font-weight: 800;
-      cursor: pointer; transition: background 0.2s, transform 0.1s;
-      box-shadow: 0 4px 20px #00d4aa33;
+    #config-card h2 {
+      font-size: 0.88rem;
+      color: #fcd34d;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    #btn-luu-sheet:active { background: #00b894; transform: scale(0.98); }
-    .hint-chua-luu {
-      font-size: 0.72rem; color: #f59e0b; text-align: center;
+
+    #config-card p {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      line-height: 1.6;
+    }
+
+    #gas-url-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #111118;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #gas-url-input:focus {
+      border-color: #00d4aa;
+    }
+
+    #btn-save-url {
+      background: #00d4aa;
+      color: #0f0f13;
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #btn-save-url:hover {
+      background: #00b894;
+    }
+
+    /* ── Main UI ─────────────────────────────────────────── */
+    #main-ui {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+    }
+
+    /* ── Counter row ─────────────────────────────────────── */
+    .counter-row {
+      display: flex;
+      gap: 12px;
+      width: 100%;
       max-width: 380px;
     }
 
-    /* Thẻ "Còn thiếu" */
+    .counter-box {
+      flex: 1;
+      background: #1a1a24;
+      border: 1px solid #2a2a3a;
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .counter-box.highlight {
+      border-color: #00d4aa33;
+      background: #0d2420;
+    }
+
+    .counter-num {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #00d4aa;
+      line-height: 1;
+    }
+
+    .counter-label {
+      font-size: 0.7rem;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Nút đồng bộ lên Sheet ──────────────────────────── */
+    #btn-dong-bo {
+      display: none;
+      width: 100%;
+      max-width: 380px;
+      background: #00d4aa;
+      color: #0f0f13;
+      border: none;
+      border-radius: 14px;
+      padding: 16px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 20px #00d4aa33;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    #btn-dong-bo:active {
+      background: #00b894;
+      transform: scale(0.98);
+    }
+
+    .hint-chua-luu {
+      font-size: 0.72rem;
+      color: #f59e0b;
+      text-align: center;
+      max-width: 380px;
+      line-height: 1.5;
+    }
+
+    /* ── Thẻ "Còn thiếu" ────────────────────────────────── */
     #card-thieu {
       display: none;
-      width: 100%; max-width: 380px;
-      background: #1a1a24; border: 1px solid #ef444455;
-      border-radius: 16px; padding: 16px 20px;
+      width: 100%;
+      max-width: 380px;
+      background: #1a1a24;
+      border: 1px solid #ef444455;
+      border-radius: 16px;
+      padding: 16px 20px;
     }
-    #card-thieu h2 {
-      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
-      color: #f87171; margin-bottom: 10px;
+
+    .thieu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
     }
-    #list-thieu { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .thieu-header h2 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #f87171;
+    }
+
+    #list-thieu {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
     #list-thieu .chip {
-      background: #2a1414; border: 1px solid #ef444433;
-      color: #fca5a5; border-radius: 6px;
-      padding: 5px 10px; font-size: 0.8rem;
+      background: #2a1414;
+      border: 1px solid #ef444433;
+      color: #fca5a5;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.8rem;
     }
-    #list-thieu .done-all { color: #00d4aa; font-size: 0.85rem; padding: 6px 0; }
+
+    #list-thieu .done-all {
+      color: #00d4aa;
+      font-size: 0.85rem;
+      padding: 6px 0;
+    }
+
     .btn-tai-ds {
-      background: none; border: 1px dashed #374151; border-radius: 8px;
-      color: #9ca3af; padding: 5px 10px; font-size: 0.72rem; cursor: pointer;
+      background: none;
+      border: 1px dashed #374151;
+      border-radius: 8px;
+      color: #9ca3af;
+      padding: 5px 10px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
     }
-    .btn-tai-ds:hover { border-color: #00d4aa; color: #00d4aa; }
 
-    /* ── Main UI (ẩn khi chưa config) ── */
-    #main-ui { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
-
-    /* Counter */
-    .counter-row { display: flex; gap: 12px; width: 100%; max-width: 380px; }
-    .counter-box {
-      flex: 1; background: #1a1a24; border: 1px solid #2a2a3a;
-      border-radius: 14px; padding: 14px 16px;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    .btn-tai-ds:hover {
+      border-color: #00d4aa;
+      color: #00d4aa;
     }
-    .counter-box.highlight { border-color: #00d4aa33; background: #0d2420; }
-    .counter-num   { font-size: 2rem; font-weight: 800; color: #00d4aa; line-height: 1; }
-    .counter-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
 
-    /* Scanner card */
+    /* ── Scanner card ────────────────────────────────────── */
     .scanner-card {
-      background: #1a1a24; border: 1px solid #2a2a3a;
-      border-radius: 16px; padding: 20px;
-      width: 100%; max-width: 380px;
-      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      background: #1a1a24;
+      border: 1px solid #2a2a3a;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
     }
-    .scanner-label { font-size: 0.8rem; color: #9ca3af; letter-spacing: 0.06em; text-transform: uppercase; }
 
-    /* Live camera */
+    .scanner-label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* ── Camera viewfinder ───────────────────────────────── */
     #reader {
-      width: 100%; max-width: 320px;
-      height: 320px;                      /* iOS không hiểu aspect-ratio tốt */
-      border-radius: 12px; overflow: hidden; position: relative; background: #000;
-      -webkit-transform: translateZ(0);   /* Buộc GPU layer trên Safari */
+      width: 100%;
+      max-width: 320px;
+      height: 320px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      background: #000000;
     }
-    #reader video {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      position: absolute !important;
-      top: 0 !important; left: 0 !important;
-    }
-    .aim-overlay {
-      position: absolute; inset: 0; pointer-events: none; z-index: 10;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .aim-box { width: 90%; height: 90%; position: relative; }
 
-    /* Nháy màn hình xanh khi bắt được mã mới */
-    #flash {
-      position: fixed; inset: 0; background: #00d4aa;
-      opacity: 0; pointer-events: none; z-index: 998;
-      transition: opacity 0.07s ease;
+    /* Video element được chèn vào #reader bởi JavaScript */
+    #reader video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
-    #flash.on { opacity: 0.4; }
-    .aim-box::before, .aim-box::after, .aim-box span::before, .aim-box span::after {
-      content: ''; position: absolute; width: 22px; height: 22px;
-      border-color: #00d4aa; border-style: solid;
+
+    /* Aim overlay — nằm trên video (z-index: 10) */
+    .aim-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .aim-box::before      { top:0;    left:0;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-    .aim-box::after       { top:0;    right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
-    .aim-box span::before { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
-    .aim-box span::after  { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    /* Khung ngắm chiếm 85% diện tích viewfinder */
+    .aim-box {
+      width: 85%;
+      height: 85%;
+      position: relative;
+    }
+
+    /* 4 góc khung ngắm */
+    .aim-box::before,
+    .aim-box::after,
+    .aim-box span::before,
+    .aim-box span::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-color: #00d4aa;
+      border-style: solid;
+    }
+
+    .aim-box::before      { top: 0; left: 0;   border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .aim-box::after       { top: 0; right: 0;  border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .aim-box span::before { bottom: 0; left: 0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .aim-box span::after  { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    /* Đường quét di chuyển từ trên xuống dưới */
     .scan-line {
-      position: absolute; left:0; right:0; height:2px; top:0;
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
       background: linear-gradient(90deg, transparent, #00d4aa, transparent);
       animation: scanMove 2s linear infinite;
     }
+
     @keyframes scanMove {
-      0%   { top:0%;   opacity:0; } 10% { opacity:1; }
-      90%  { opacity:1; }           100%{ top:100%; opacity:0; }
+      0%   { top: 0%;   opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
     }
 
-    /* Capture fallback */
-    #capture-mode { display:none; flex-direction:column; align-items:center; gap:16px; width:100%; }
+    /* ── Flash effect khi bắt được mã ───────────────────── */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: #00d4aa;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 998;
+      transition: opacity 0.07s ease;
+    }
+
+    #flash.on {
+      opacity: 0.45;
+    }
+
+    /* ── Capture mode fallback (khi camera không có) ─────── */
+    #capture-mode {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+    }
+
     .capture-icon {
-      width:110px; height:110px; border-radius:50%;
-      background:#111118; border:2px dashed #2a2a3a;
-      display:flex; align-items:center; justify-content:center; font-size:2.8rem;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: #111118;
+      border: 2px dashed #2a2a3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
     }
-    .capture-hint { font-size:0.82rem; color:#6b7280; text-align:center; line-height:1.5; }
+
+    .capture-hint {
+      font-size: 0.82rem;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.6;
+    }
+
     #capture-btn {
-      display:inline-flex; align-items:center; gap:10px;
-      background:#00d4aa; color:#0f0f13; border:none; border-radius:10px;
-      padding:14px 28px; font-size:0.95rem; font-weight:700; cursor:pointer;
-      transition:background 0.2s, transform 0.1s;
-      width:100%; max-width:280px; justify-content:center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #00d4aa;
+      color: #0f0f13;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 28px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      max-width: 280px;
+      transition: background 0.2s, transform 0.1s;
     }
-    #capture-btn:active { background:#00b894; transform:scale(0.97); }
-    #qr-file-input { display:none; }
 
-    /* Status */
-    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#9ca3af; }
-    .dot { width:8px; height:8px; border-radius:50%; background:#374151; flex-shrink:0; transition:background 0.3s; }
-    .dot.active { background:#00d4aa; box-shadow:0 0 6px #00d4aa88; }
-    .dot.busy   { background:#f59e0b; box-shadow:0 0 6px #f59e0b88; }
-    .dot.error  { background:#ef4444; box-shadow:0 0 6px #ef444488; }
+    #capture-btn:active {
+      background: #00b894;
+      transform: scale(0.97);
+    }
 
-    /* Toast */
-    #toast {
-      position:fixed; top:20px; left:50%;
-      transform:translateX(-50%) translateY(-80px);
-      padding:12px 22px; border-radius:10px;
-      font-size:0.88rem; font-weight:600;
-      z-index:999; opacity:0; pointer-events:none;
-      max-width:90vw; text-align:center;
-      transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
-    }
-    #toast.show    { transform:translateX(-50%) translateY(0); opacity:1; }
-    #toast.success { background:#064e3b; border:1px solid #00d4aa; color:#6ee7b7; }
-    #toast.fail    { background:#450a0a; border:1px solid #ef4444; color:#fca5a5; }
-    #toast.warn    { background:#451a03; border:1px solid #f59e0b; color:#fcd34d; }
-
-    /* Session list */
-    .session-card {
-      background:#1a1a24; border:1px solid #2a2a3a;
-      border-radius:16px; padding:16px 20px;
-      width:100%; max-width:380px;
-    }
-    .session-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-    .session-header h2 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:#6b7280; }
-    .session-actions { display:flex; gap:8px; }
-    .btn-ghost {
-      background:none; border:1px solid #374151; border-radius:7px;
-      padding:5px 10px; font-size:0.75rem; color:#9ca3af;
-      cursor:pointer; transition:border-color 0.2s, color 0.2s;
-    }
-    .btn-ghost:hover       { border-color:#6b7280; color:#e0e0e0; }
-    .btn-ghost.danger:hover{ border-color:#ef4444; color:#f87171; }
-
-    #session-list {
-      list-style:none; display:flex; flex-direction:column; gap:8px;
-      max-height:320px; overflow-y:auto;
-    }
-    #session-list::-webkit-scrollbar      { width:4px; }
-    #session-list::-webkit-scrollbar-track{ background:transparent; }
-    #session-list::-webkit-scrollbar-thumb{ background:#2a2a3a; border-radius:2px; }
-
-    #session-list li {
-      display:flex; justify-content:space-between; align-items:center;
-      background:#111118; border-radius:8px; padding:10px 14px;
-      font-size:0.85rem; animation:slideIn 0.25s ease;
-    }
-    @keyframes slideIn {
-      from { opacity:0; transform:translateY(-5px); }
-      to   { opacity:1; transform:translateY(0); }
-    }
-    .item-left  { display:flex; align-items:center; gap:10px; }
-    .item-index { font-size:0.72rem; color:#374151; min-width:22px; }
-    .item-ma    { font-weight:700; color:#a5f3fc; }
-    .item-time  { color:#6b7280; font-size:0.78rem; }
-    .empty-msg  { text-align:center; color:#374151; font-size:0.82rem; padding:12px 0; }
-
-    /* Debug panel */
-    #debug-panel {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      background: #000; color: #0f0; font-size: 0.7rem;
-      max-height: 150px; overflow-y: auto;
-      font-family: monospace; padding: 8px;
-      border-top: 1px solid #333; z-index: 9999;
+    #qr-file-input {
       display: none;
     }
+
+    /* ── Status dot ──────────────────────────────────────── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: #9ca3af;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #374151;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    .dot.active { background: #00d4aa; box-shadow: 0 0 6px #00d4aa88; }
+    .dot.busy   { background: #f59e0b; box-shadow: 0 0 6px #f59e0b88; }
+    .dot.error  { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+
+    /* ── Toast notification ──────────────────────────────── */
+    #toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-80px);
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      max-width: 90vw;
+      text-align: center;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s;
+    }
+
+    #toast.show    { transform: translateX(-50%) translateY(0); opacity: 1; }
+    #toast.success { background: #064e3b; border: 1px solid #00d4aa; color: #6ee7b7; }
+    #toast.fail    { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+    #toast.warn    { background: #451a03; border: 1px solid #f59e0b; color: #fcd34d; }
+
+    /* ── Session card (danh sách đã quét) ───────────────── */
+    .session-card {
+      background: #1a1a24;
+      border: 1px solid #2a2a3a;
+      border-radius: 16px;
+      padding: 16px 20px;
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .session-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .session-header h2 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #6b7280;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-ghost {
+      background: none;
+      border: 1px solid #374151;
+      border-radius: 7px;
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-ghost:hover        { border-color: #6b7280; color: #e0e0e0; }
+    .btn-ghost.danger:hover { border-color: #ef4444; color: #f87171; }
+    .btn-ghost.primary      { border-color: #00d4aa55; color: #00d4aa; }
+    .btn-ghost.primary:hover{ border-color: #00d4aa; background: #00d4aa11; }
+
+    #session-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+
+    #session-list::-webkit-scrollbar       { width: 4px; }
+    #session-list::-webkit-scrollbar-track { background: transparent; }
+    #session-list::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+
+    #session-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #111118;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      animation: slideIn 0.25s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .item-left  { display: flex; align-items: center; gap: 10px; }
+    .item-index { font-size: 0.72rem; color: #374151; min-width: 22px; }
+    .item-ma    { font-weight: 700; color: #a5f3fc; }
+    .item-time  { color: #6b7280; font-size: 0.78rem; }
+    .empty-msg  { text-align: center; color: #374151; font-size: 0.82rem; padding: 12px 0; }
+
+    /* ── Debug panel (bật tắt bằng 3 lần bấm header) ────── */
+    #debug-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.94);
+      font-size: 0.67rem;
+      font-family: 'Courier New', monospace;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      border-top: 1px solid #222;
+      z-index: 9999;
+      display: none;
+    }
+
     #debug-panel.show { display: block; }
-    #debug-panel > div { margin: 2px 0; }
-    .debug-error { color: #f44; }
-    .debug-warn { color: #fa0; }
-    .debug-info { color: #0f0; }
+
+    #debug-panel p {
+      margin: 1px 0;
+      line-height: 1.4;
+    }
+
+    .d-inf { color: #00ff88; }
+    .d-wrn { color: #ffaa00; }
+    .d-err { color: #ff5555; }
   </style>
 </head>
 <body>
 
+  <!-- ── Header ─────────────────────────────────────────── -->
   <header>
     <h1>Điểm Danh Học Sinh</h1>
-    <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v22</p>
+    <p class="sub-date" id="header-date"></p>
+    <p class="version">v24-jsQR · bấm 3x header → debug</p>
   </header>
 
+  <!-- Toast notification -->
   <div id="toast"></div>
+
+  <!-- Flash overlay khi bắt mã -->
   <div id="flash"></div>
+
+  <!-- Debug panel -->
   <div id="debug-panel"></div>
 
-  <!-- Bước cấu hình URL (chỉ hiện lần đầu) -->
+  <!-- ── Config card ────────────────────────────────────── -->
   <div id="config-card">
     <h2>⚙ Cấu hình lần đầu</h2>
-    <p>Dán URL Apps Script đã deploy vào ô bên dưới. Chỉ cần làm một lần, ứng dụng sẽ ghi nhớ.</p>
-    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+    <p>
+      Dán URL Google Apps Script đã deploy vào ô bên dưới.
+      Chỉ cần làm một lần — ứng dụng sẽ ghi nhớ.
+    </p>
+    <input
+      id="gas-url-input"
+      type="url"
+      placeholder="https://script.google.com/macros/s/.../exec"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+      spellcheck="false"
+    />
     <button id="btn-save-url" onclick="luuCauHinh()">Lưu và bắt đầu</button>
   </div>
 
-  <!-- Giao diện chính -->
+  <!-- ── Main UI ────────────────────────────────────────── -->
   <div id="main-ui">
 
+    <!-- Counter: số đã quét + số trùng -->
     <div class="counter-row">
       <div class="counter-box highlight">
         <span class="counter-num" id="count-scanned">0</span>
         <span class="counter-label">Đã điểm danh</span>
       </div>
       <div class="counter-box">
-        <span class="counter-num" id="count-dup" style="color:#f59e0b">0</span>
+        <span class="counter-num" id="count-dup" style="color: #f59e0b">0</span>
         <span class="counter-label">Quét trùng</span>
       </div>
     </div>
 
-    <button id="btn-luu-sheet" onclick="luuVaoSheet()">⬆ Lưu vào Sheet</button>
-    <p class="hint-chua-luu" id="hint-chua-luu" style="display:none">
-      Các mã đã quét đang lưu tạm trong máy. Bấm "Lưu vào Sheet" để ghi lên Google Sheet.
+    <!-- Nút đồng bộ lên Google Sheets (chỉ hiện khi có mã chờ) -->
+    <button id="btn-dong-bo" onclick="dongBoLenSheet()">
+      ⬆ Đồng bộ lên Google Sheets
+    </button>
+    <p class="hint-chua-luu" id="hint-chua-luu" style="display: none">
+      Mã đã quét đang lưu tạm trong máy.
+      Bấm "Đồng bộ" để ghi lên Google Sheets.
     </p>
 
+    <!-- Thẻ "Còn thiếu" -->
     <div id="card-thieu">
-      <h2 style="display:flex;justify-content:space-between;align-items:center">
-        <span id="thieu-title">Còn thiếu</span>
+      <div class="thieu-header">
+        <h2 id="thieu-title">Còn thiếu</h2>
         <button class="btn-tai-ds" onclick="taiDanhSachLop()">↻ Tải lại DS lớp</button>
-      </h2>
+      </div>
       <div id="list-thieu"></div>
     </div>
 
+    <!-- Scanner card -->
     <div class="scanner-card">
       <span class="scanner-label" id="mode-label">Camera quét mã QR</span>
 
+      <!-- Camera viewfinder: video được chèn vào đây bởi JS -->
       <div id="reader">
         <div class="aim-overlay">
-          <div class="aim-box"><span></span><div class="scan-line"></div></div>
+          <div class="aim-box">
+            <span></span>
+            <div class="scan-line"></div>
+          </div>
         </div>
       </div>
 
+      <!-- Fallback: chụp ảnh (hiện khi camera không khả dụng) -->
       <div id="capture-mode">
         <div class="capture-icon">📷</div>
-        <p class="capture-hint">Nhấn nút để mở camera,<br>chụp ảnh mã QR của học sinh</p>
+        <p class="capture-hint">
+          Camera tự động không khả dụng.<br>
+          Nhấn nút để mở camera và chụp ảnh mã QR.
+        </p>
         <button id="capture-btn" onclick="document.getElementById('qr-file-input').click()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-            <circle cx="12" cy="13" r="4"/>
-          </svg>
-          Chụp mã QR
+          📸 Chụp ảnh mã QR
         </button>
-        <input type="file" id="qr-file-input" accept="image/*" capture="environment" />
+        <input
+          type="file"
+          id="qr-file-input"
+          accept="image/*"
+          capture="environment"
+        />
       </div>
 
+      <!-- Status indicator -->
       <div class="status-row">
         <div class="dot" id="status-dot"></div>
         <span id="status-text">Đang khởi động…</span>
       </div>
     </div>
 
+    <!-- Danh sách buổi học -->
     <div class="session-card">
       <div class="session-header">
         <h2>Danh sách buổi học</h2>
         <div class="session-actions">
-          <button class="btn-ghost" onclick="inQR()" title="In mã QR">🖨</button>
-          <button class="btn-ghost" onclick="doiCauHinh()" title="Đổi URL GAS">⚙</button>
+          <!-- Nút In mã QR -->
+          <button class="btn-ghost primary" onclick="inMaQR()" title="In mã QR học sinh">🖨 In QR</button>
+          <!-- Nút cài đặt URL -->
+          <button class="btn-ghost" onclick="doiCauHinh()" title="Đổi URL Apps Script">⚙</button>
+          <!-- Nút buổi mới -->
           <button class="btn-ghost danger" onclick="batDauBuoiMoi()">↺ Buổi mới</button>
         </div>
       </div>
@@ -345,36 +707,59 @@
 
   </div><!-- /main-ui -->
 
-<script>
-  // ── Debug panel — capture logs để xem trên iPhone ────────
-  var debugLogs = [];
-  var debugPanel = document.getElementById('debug-panel');
-  var originalLog = console.log, originalWarn = console.warn, originalError = console.error;
 
-  function addDebugLog(msg, type) {
-    var time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
-    debugLogs.push('<div class="debug-' + type + '">[' + time + '] ' + msg + '</div>');
-    if (debugLogs.length > 50) debugLogs.shift();
+<script>
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 1 — DEBUG PANEL
+     Hiển thị console.log/warn/error trực tiếp trên màn hình.
+     Bật/tắt bằng cách bấm 3 lần vào phần header.
+  ══════════════════════════════════════════════════════════ */
+  var debugLogs  = [];
+  var debugPanel = document.getElementById('debug-panel');
+  var _origLog   = console.log.bind(console);
+  var _origWarn  = console.warn.bind(console);
+  var _origErr   = console.error.bind(console);
+
+  function addDebugEntry(msg, cssClass) {
+    var t = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+    var line = '<p class="' + cssClass + '">[' + t + '] '
+             + String(msg).substring(0, 180).replace(/</g, '&lt;')
+             + '</p>';
+    debugLogs.push(line);
+    if (debugLogs.length > 100) debugLogs.shift();
     debugPanel.innerHTML = debugLogs.join('');
+    debugPanel.scrollTop = debugPanel.scrollHeight;
   }
 
-  console.log = function(msg) { addDebugLog(msg, 'info'); originalLog.apply(console, arguments); };
-  console.warn = function(msg) { addDebugLog(msg, 'warn'); originalWarn.apply(console, arguments); };
-  console.error = function(msg) { addDebugLog(msg, 'error'); originalError.apply(console, arguments); };
+  console.log   = function(m) { addDebugEntry(m, 'd-inf'); _origLog(m);  };
+  console.warn  = function(m) { addDebugEntry(m, 'd-wrn'); _origWarn(m); };
+  console.error = function(m) { addDebugEntry(m, 'd-err'); _origErr(m);  };
 
-  // Bật debug panel khi nhấn 3 lần vào header
-  var headerClicks = 0;
-  document.querySelector('header').addEventListener('click', function() {
-    headerClicks++;
-    if (headerClicks === 3) {
+  var headerClickCount = 0;
+  var headerClickTimer = null;
+
+  document.querySelector('header').addEventListener('click', function () {
+    headerClickCount++;
+    clearTimeout(headerClickTimer);
+    headerClickTimer = setTimeout(function () { headerClickCount = 0; }, 800);
+    if (headerClickCount >= 3) {
       debugPanel.classList.toggle('show');
-      headerClicks = 0;
+      headerClickCount = 0;
     }
   });
 
-  // ── Cấu hình ──────────────────────────────────────────────
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 2 — CẤU HÌNH GAS URL
+  ══════════════════════════════════════════════════════════ */
   var GAS_API_URL = localStorage.getItem('gasUrl') || '';
-  console.log('App loaded - v21');
+
+  console.log('App khởi động - v24-jsQR');
+
+  // Nếu đã có URL thì bỏ qua màn hình config
+  if (GAS_API_URL) {
+    document.getElementById('config-card').style.display = 'none';
+    document.getElementById('main-ui').style.display     = 'flex';
+  }
 
   function luuCauHinh() {
     var url = document.getElementById('gas-url-input').value.trim();
@@ -387,345 +772,614 @@
     document.getElementById('config-card').style.display = 'none';
     document.getElementById('main-ui').style.display     = 'flex';
     capNhatThieu();
-    khoiDongScanner();
+    khoiDongCamera();
   }
 
   function doiCauHinh() {
+    if (!confirm('Xoá cấu hình URL hiện tại và tải lại trang?')) return;
     localStorage.removeItem('gasUrl');
-    document.getElementById('config-card').style.display = '';
-    document.getElementById('main-ui').style.display     = 'none';
+    location.reload();
   }
 
-  function inQR() {
+  // Mở trang in mã QR sang tab mới
+  function inMaQR() {
     if (!GAS_API_URL) {
-      alert('Chưa cấu hình URL. Vui lòng cấu hình trước.');
+      alert('Chưa cấu hình URL Apps Script. Vui lòng cấu hình trước.');
       return;
     }
     window.open(GAS_API_URL + '?action=inQR', '_blank');
   }
 
-  // Nếu đã có URL, bỏ qua màn hình config
-  if (GAS_API_URL) {
-    document.getElementById('config-card').style.display = 'none';
-    document.getElementById('main-ui').style.display     = 'flex';
-  }
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 3 — TRẠNG THÁI BUỔI HỌC
+  ══════════════════════════════════════════════════════════ */
+  var sessionSet  = {};       // { maHS: true } — track mã đã quét trong phiên
+  var pendingList = [];       // mảng mã chờ đồng bộ lên Sheet
+  var classList   = [];       // [{ma, ten}] — danh sách lớp để tính vắng
+  var scanCount   = 0;        // số học sinh đã quét (không trùng)
+  var dupCount    = 0;        // số lần quét trùng
 
-  // ── Trạng thái buổi học ───────────────────────────────────
-  var sessionSet   = {};
-  var pendingList  = [];     // các mã đã quét, chờ lưu lên sheet
-  var classList    = [];     // danh sách lớp [{ma, ten}] để tính vắng
-  var scanCount    = 0;
-  var dupCount     = 0;
-  var lastRawCode  = '';
-  var cooldownMs   = 400;   // giảm từ 1000 để quét liên tục nhanh hơn
-  var toastTimer   = null;
-  var emptyMsgEl   = document.getElementById('empty-msg');
+  var lastScannedCode = '';   // mã vừa quét (để chống đọc lặp quá nhanh)
+  var lastScannedTime = 0;    // timestamp lần quét lastScannedCode
+  var COOLDOWN_MS     = 1500; // ms tối thiểu giữa 2 lần ghi cùng 1 mã
 
-  var dot         = document.getElementById('status-dot');
-  var statusText  = document.getElementById('status-text');
-  var toast       = document.getElementById('toast');
-  var sessionList = document.getElementById('session-list');
-  var modeLabel   = document.getElementById('mode-label');
-  var countEl     = document.getElementById('count-scanned');
-  var dupEl       = document.getElementById('count-dup');
-  var btnLuu      = document.getElementById('btn-luu-sheet');
-  var hintChuaLuu = document.getElementById('hint-chua-luu');
+  var toastTimer  = null;
+  var emptyMsgEl  = document.getElementById('empty-msg');
 
-  // Hiện ngày
-  (function() {
-    document.getElementById('header-date').textContent =
-      new Date().toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
+  // DOM refs
+  var dotEl         = document.getElementById('status-dot');
+  var statusTextEl  = document.getElementById('status-text');
+  var toastEl       = document.getElementById('toast');
+  var sessionListEl = document.getElementById('session-list');
+  var modeLabelEl   = document.getElementById('mode-label');
+  var countEl       = document.getElementById('count-scanned');
+  var dupEl         = document.getElementById('count-dup');
+  var btnDongBo     = document.getElementById('btn-dong-bo');
+  var hintChuaLuu   = document.getElementById('hint-chua-luu');
+  var flashEl       = document.getElementById('flash');
+
+  // Hiển thị ngày hôm nay trong header
+  document.getElementById('header-date').textContent =
+    new Date().toLocaleDateString('vi-VN', {
+      weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+
+  // Tải classList đã lưu từ localStorage
+  (function khoiPhucClassList() {
+    try {
+      var raw = localStorage.getItem('classList');
+      if (raw) classList = JSON.parse(raw) || [];
+    } catch (e) {
+      classList = [];
+    }
   })();
 
-  // Tải danh sách lớp đã lưu trong máy
-  try {
-    var clSaved = localStorage.getItem('classList');
-    if (clSaved) classList = JSON.parse(clSaved) || [];
-  } catch (e) { classList = []; }
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 4 — XỬ LÝ URL PARAMS KHI QUAY LẠI TỪ GAS
+     GAS redirect về app với ?saved=N hoặc ?ds=[...]
+  ══════════════════════════════════════════════════════════ */
+  (function xuLyThamSoURL() {
+    var params = new URLSearchParams(window.location.search);
 
-  // ── Xử lý khi quay lại từ trang lưu / tải danh sách ───────
-  (function xuLyQuayLai() {
-    var params = new URLSearchParams(location.search);
-
+    // Quay lại sau khi đồng bộ thành công
     if (params.has('saved')) {
-      var n = params.get('saved');
+      var soLuong = params.get('saved');
       try { localStorage.removeItem('pendingList'); } catch (e) {}
       pendingList = [];
       history.replaceState({}, '', location.pathname);
-      setTimeout(function() {
-        showToast('✓ Đã lưu ' + n + ' học sinh vào Sheet!', 'success');
+      setTimeout(function () {
+        showToast('✓ Đã lưu ' + soLuong + ' học sinh lên Google Sheets!', 'success');
       }, 700);
     }
 
+    // Quay lại sau khi tải danh sách lớp
     if (params.has('ds')) {
       try {
         classList = JSON.parse(params.get('ds')) || [];
         localStorage.setItem('classList', JSON.stringify(classList));
-        setTimeout(function() {
-          showToast('📋 Đã tải DS lớp: ' + classList.length + ' học sinh', 'success');
+        setTimeout(function () {
+          showToast('📋 Đã tải danh sách: ' + classList.length + ' học sinh', 'success');
         }, 500);
-      } catch (e) {}
+      } catch (e) {
+        console.error('Parse ds param: ' + e);
+      }
       history.replaceState({}, '', location.pathname);
     }
   })();
 
-  // ── Tải danh sách lớp (điều hướng top-level) ──────────────
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 5 — HELPER FUNCTIONS
+  ══════════════════════════════════════════════════════════ */
+  function showToast(msg, type) {
+    toastEl.textContent = msg;
+    toastEl.className   = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = ''; }, 3200);
+  }
+
+  function setStatus(state, text) {
+    dotEl.className      = 'dot ' + state;
+    statusTextEl.textContent = text;
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   function taiDanhSachLop() {
     var returnUrl = location.origin + location.pathname;
     window.location.href = GAS_API_URL
-      + '?action=loadDS&returnUrl=' + encodeURIComponent(returnUrl);
+      + '?action=loadDS'
+      + '&returnUrl=' + encodeURIComponent(returnUrl);
   }
 
-  // ── Cập nhật thẻ "Còn thiếu" ──────────────────────────────
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 6 — ÂM THANH & HIỆU ỨNG HÌNH ẢNH
+  ══════════════════════════════════════════════════════════ */
+  var audioCtx = null;
+
+  function moKhoaAudioContext() {
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    } catch (e) {}
+  }
+
+  // iOS cần user gesture để bật AudioContext
+  document.addEventListener('touchstart', moKhoaAudioContext, { passive: true });
+  document.addEventListener('click',      moKhoaAudioContext, { passive: true });
+
+  function beep() {
+    try {
+      if (!audioCtx) return;
+      var oscillator = audioCtx.createOscillator();
+      var gainNode   = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.type          = 'sine';
+      oscillator.frequency.value = 920;
+      gainNode.gain.setValueAtTime(0.22, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {}
+  }
+
+  function nhayManHinh() {
+    flashEl.classList.add('on');
+    setTimeout(function () { flashEl.classList.remove('on'); }, 110);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 7 — THẺ "CÒN THIẾU"
+     Hiển thị học sinh chưa được quét trong buổi học.
+  ══════════════════════════════════════════════════════════ */
   function capNhatThieu() {
     var card  = document.getElementById('card-thieu');
     var list  = document.getElementById('list-thieu');
     var title = document.getElementById('thieu-title');
+
     card.style.display = 'block';
 
     if (!classList.length) {
       title.textContent = 'Danh sách lớp';
-      list.innerHTML = '<button class="btn-tai-ds" style="font-size:0.85rem;padding:10px 16px" '
+      list.innerHTML =
+        '<button class="btn-tai-ds" style="font-size:0.85rem;padding:10px 16px" '
         + 'onclick="taiDanhSachLop()">📥 Tải danh sách lớp để xem ai còn thiếu</button>';
       return;
     }
 
-    var absent = classList.filter(function(s) { return !sessionSet[s.ma]; });
-    title.textContent = 'Còn thiếu (' + absent.length + '/' + classList.length + ')';
-    if (absent.length === 0) {
+    var vang = classList.filter(function (s) { return !sessionSet[s.ma]; });
+    title.textContent = 'Còn thiếu (' + vang.length + '/' + classList.length + ')';
+
+    if (vang.length === 0) {
       list.innerHTML = '<div class="done-all">✓ Đã quét đủ cả lớp!</div>';
     } else {
-      list.innerHTML = absent.map(function(s) {
+      list.innerHTML = vang.map(function (s) {
         return '<span class="chip">' + escHtml(s.ten || s.ma) + '</span>';
       }).join('');
     }
   }
 
-  // ── Lưu / khôi phục danh sách tạm ─────────────────────────
-  function luuPending() {
-    try { localStorage.setItem('pendingList', JSON.stringify(pendingList)); } catch (e) {}
-  }
-  function capNhatNutLuu() {
-    if (pendingList.length > 0) {
-      btnLuu.style.display = 'block';
-      btnLuu.textContent = '⬆ Lưu ' + pendingList.length + ' học sinh vào Sheet';
-      hintChuaLuu.style.display = 'block';
-    } else {
-      btnLuu.style.display = 'none';
-      hintChuaLuu.style.display = 'none';
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 8 — PENDING LIST (BATCH MODE)
+     Mã quét được lưu tạm trên máy, chưa ghi lên Sheet.
+     Nút "Đồng bộ" chỉ hiện khi có mã đang chờ.
+  ══════════════════════════════════════════════════════════ */
+  function luuPendingVaoStorage() {
+    try {
+      localStorage.setItem('pendingList', JSON.stringify(pendingList));
+    } catch (e) {
+      console.warn('localStorage write: ' + e);
     }
   }
 
-  // ── Âm thanh "bíp" khi quét được (giúp lia camera không cần nhìn) ──
-  var audioCtx = null;
-  function moKhoaAudio() {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    } catch (e) {}
-  }
-  // iOS cần 1 lần chạm để bật âm thanh
-  document.addEventListener('touchstart', moKhoaAudio, { once: false });
-  document.addEventListener('click', moKhoaAudio, { once: false });
-
-  function beep(ok) {
-    try {
-      if (!audioCtx) return;
-      var o = audioCtx.createOscillator();
-      var g = audioCtx.createGain();
-      o.connect(g); g.connect(audioCtx.destination);
-      o.type = 'sine';
-      o.frequency.value = ok ? 920 : 320;   // bắt mới: cao | trùng: thấp
-      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.13);
-      o.start();
-      o.stop(audioCtx.currentTime + 0.13);
-    } catch (e) {}
+  function capNhatNutDongBo() {
+    if (pendingList.length > 0) {
+      btnDongBo.style.display      = 'block';
+      btnDongBo.textContent        = '⬆ Đồng bộ ' + pendingList.length + ' học sinh lên Google Sheets';
+      hintChuaLuu.style.display    = 'block';
+    } else {
+      btnDongBo.style.display      = 'none';
+      hintChuaLuu.style.display    = 'none';
+    }
   }
 
-  // Nháy màn hình xanh báo bắt được mã mới
-  var flashEl = document.getElementById('flash');
-  function nhayMan() {
-    flashEl.classList.add('on');
-    setTimeout(function() { flashEl.classList.remove('on'); }, 110);
-  }
-
-  // ── Helpers ───────────────────────────────────────────────
-  function showToast(msg, type) {
-    toast.textContent = msg;
-    toast.className   = 'show ' + type;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function() { toast.className = ''; }, 3000);
-  }
-  function setStatus(state, text) {
-    dot.className = 'dot ' + state;
-    statusText.textContent = text;
-  }
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  function addToSessionList(maHS, thoiGian) {
-    if (emptyMsgEl) { emptyMsgEl.remove(); emptyMsgEl = null; }
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 9 — SESSION LIST (DANH SÁCH BUỔI HỌC)
+  ══════════════════════════════════════════════════════════ */
+  function themVaoSessionList(maHS, thoiGian) {
+    if (emptyMsgEl) {
+      emptyMsgEl.remove();
+      emptyMsgEl = null;
+    }
     scanCount++;
     countEl.textContent = scanCount;
+
     var li = document.createElement('li');
     li.innerHTML =
-      '<span class="item-left"><span class="item-index">' + scanCount + '.</span>' +
-      '<span class="item-ma">' + escHtml(maHS) + '</span></span>' +
-      '<span class="item-time">' + escHtml(thoiGian) + '</span>';
-    sessionList.insertBefore(li, sessionList.firstChild);
+      '<span class="item-left">'
+      + '<span class="item-index">' + scanCount + '.</span>'
+      + '<span class="item-ma">'    + escHtml(maHS) + '</span>'
+      + '</span>'
+      + '<span class="item-time">'  + escHtml(thoiGian) + '</span>';
+    sessionListEl.insertBefore(li, sessionListEl.firstChild);
   }
 
-  // ── Buổi mới ─────────────────────────────────────────────
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 10 — GHI ĐIỂM DANH (BATCH MODE)
+     Khi quét được mã mới: lưu vào pendingList, cập nhật UI.
+     Không gọi mạng ngay — chờ người dùng bấm "Đồng bộ".
+  ══════════════════════════════════════════════════════════ */
+  function ghiDiemDanh(maHS) {
+    var thoiGian = new Date().toLocaleTimeString('vi-VN', {
+      hour:   '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+
+    // Đánh dấu đã có mặt
+    sessionSet[maHS] = true;
+
+    // Thêm vào batch chờ đồng bộ
+    pendingList.push(maHS);
+    luuPendingVaoStorage();
+
+    // Cập nhật UI
+    themVaoSessionList(maHS, thoiGian);
+    showToast('✓ Đã quét: ' + maHS, 'success');
+    setStatus('active', 'Sẵn sàng quét');
+    beep();
+    nhayManHinh();
+    capNhatNutDongBo();
+    capNhatThieu();
+
+    console.log('Ghi: ' + maHS + ' lúc ' + thoiGian);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 11 — BUỔI MỚI
+  ══════════════════════════════════════════════════════════ */
   function batDauBuoiMoi() {
-    if (pendingList.length > 0 && !confirm('Còn ' + pendingList.length + ' HS chưa lưu lên Sheet. Bắt đầu buổi mới sẽ xóa hết. Tiếp tục?')) return;
-    sessionSet = {}; pendingList = []; scanCount = 0; dupCount = 0;
+    if (pendingList.length > 0) {
+      if (!confirm(
+        'Còn ' + pendingList.length + ' học sinh chưa đồng bộ lên Sheet.\n'
+        + 'Bắt đầu buổi mới sẽ xoá toàn bộ. Tiếp tục?'
+      )) {
+        return;
+      }
+    }
+
+    sessionSet  = {};
+    pendingList = [];
+    scanCount   = 0;
+    dupCount    = 0;
+
     try { localStorage.removeItem('pendingList'); } catch (e) {}
-    countEl.textContent = '0'; dupEl.textContent = '0';
-    sessionList.innerHTML = '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
+
+    countEl.textContent = '0';
+    dupEl.textContent   = '0';
+
+    sessionListEl.innerHTML =
+      '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
     emptyMsgEl = document.getElementById('empty-msg');
-    capNhatNutLuu();
+
+    capNhatNutDongBo();
     capNhatThieu();
     setStatus('active', 'Sẵn sàng quét');
     showToast('Đã bắt đầu buổi học mới', 'success');
   }
 
-  // ── Lưu tạm mã quét (KHÔNG gọi mạng — iOS chặn request ngầm) ──
-  function guiDiemDanh(maHS) {
-    var thoiGian = new Date().toLocaleString('vi-VN', {
-      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
-    });
-    sessionSet[maHS] = true;
-    pendingList.push(maHS);
-    luuPending();
-    addToSessionList(maHS, thoiGian + ' (chưa lưu)');
-    showToast('✓ Đã quét: ' + maHS, 'success');
-    setStatus('active', 'Sẵn sàng quét');
-    beep(true);      // tiếng bíp báo bắt được mã mới
-    nhayMan();       // nháy màn hình xanh
-    capNhatNutLuu();
-    capNhatThieu();
-  }
-
-  // ── Gửi cả lô lên Google Sheet (điều hướng top-level) ──────
-  function luuVaoSheet() {
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 12 — ĐỒNG BỘ LÊN GOOGLE SHEETS
+     Điều hướng top-level đến GAS với toàn bộ mã trong batch.
+     GAS ghi sheet rồi redirect về app với ?saved=N.
+     (Cách duy nhất qua được iOS Safari ITP)
+  ══════════════════════════════════════════════════════════ */
+  function dongBoLenSheet() {
     if (pendingList.length === 0) return;
-    if (!confirm('Lưu ' + pendingList.length + ' học sinh lên Google Sheet?')) return;
+
+    if (!confirm('Đồng bộ ' + pendingList.length + ' học sinh lên Google Sheets?')) return;
 
     var returnUrl = location.origin + location.pathname;
     var url = GAS_API_URL
       + '?action=batch'
-      + '&codes=' + encodeURIComponent(pendingList.join(','))
+      + '&codes='     + encodeURIComponent(pendingList.join(','))
       + '&returnUrl=' + encodeURIComponent(returnUrl);
 
-    setStatus('busy', 'Đang lưu lên Sheet…');
-    // Điều hướng trực tiếp — cách duy nhất chạy được trên iPhone
+    setStatus('busy', 'Đang đồng bộ lên Google Sheets…');
     window.location.href = url;
   }
 
-  // ── Xử lý mã quét — camera LUÔN chạy liên tục, không pause ──
-  function onScanSuccess(decodedText) {
-    var maHS = decodedText.trim();
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 13 — CALLBACK KHI PHÁT HIỆN MÃ QR
+  ══════════════════════════════════════════════════════════ */
+  function onQRDetected(rawText) {
+    var maHS = rawText.trim();
     if (!maHS) return;
 
-    // Chống đọc lặp cùng mã trong tích tắc (không phải chặn vĩnh viễn)
-    if (maHS === lastRawCode) return;
-    lastRawCode = maHS;
-    setTimeout(function() { if (lastRawCode === maHS) lastRawCode = ''; }, cooldownMs);
+    var now = Date.now();
 
-    // ĐÃ quét rồi → BỎ QUA ÂM THẦM (không bíp, không thông báo), camera vẫn quét
+    // Chống đọc lặp: cùng mã trong khoảng COOLDOWN_MS → bỏ qua
+    if (maHS === lastScannedCode && (now - lastScannedTime) < COOLDOWN_MS) return;
+    lastScannedCode = maHS;
+    lastScannedTime = now;
+
+    // Đã quét trong buổi này → đếm trùng, bỏ qua
     if (sessionSet[maHS]) {
       dupCount++;
       dupEl.textContent = dupCount;
       return;
     }
 
-    // Mã MỚI → bíp + nháy + thêm vào danh sách
-    guiDiemDanh(maHS);
+    // Mã mới → ghi điểm danh
+    ghiDiemDanh(maHS);
   }
 
-  // ── Capture mode fallback ─────────────────────────────────
-  function switchToCaptureMode() {
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 14 — CAMERA SCANNER (jsQR)
+
+     Chiến lược:
+     1. Gọi getUserMedia để lấy luồng camera sau (environment)
+     2. Gắn stream vào <video> element chèn vào #reader
+     3. Dùng requestAnimationFrame để liên tục capture frame
+     4. Mỗi 67ms (~15fps) vẽ frame vào canvas ẩn
+     5. Chạy jsQR trên pixel data → callback khi có kết quả
+     6. Không bao giờ dừng camera trừ khi switch sang capture mode
+
+     Thông số tương đương html5-qrcode:
+     - fps: 15     → SCAN_INTERVAL_MS = 67
+     - qrbox: 85%  → CSS aim-box width/height = 85%
+     - continuous  → requestAnimationFrame không bao giờ dừng
+  ══════════════════════════════════════════════════════════ */
+  var videoElement   = null;    // <video> element được tạo khi camera khởi động
+  var cameraStream   = null;    // MediaStream từ getUserMedia
+  var animFrameId    = null;    // ID từ requestAnimationFrame
+  var isScanning     = false;   // true khi camera đang chạy và scan loop đang chạy
+  var lastScanTime   = 0;       // timestamp lần cuối chạy jsQR
+
+  var SCAN_INTERVAL_MS = 67;    // ~15fps (1000ms / 15 = 66.7ms)
+
+  // Canvas ẩn dùng để capture frame từ video và decode QR
+  var hiddenCanvas   = document.createElement('canvas');
+  var canvasContext  = hiddenCanvas.getContext('2d');
+
+  function chuyenSangCaptureMode() {
+    isScanning = false;
+
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(function (track) { track.stop(); });
+      cameraStream = null;
+    }
+
     document.getElementById('reader').style.display       = 'none';
     document.getElementById('capture-mode').style.display = 'flex';
-    modeLabel.textContent = 'Chụp ảnh mã QR';
+    modeLabelEl.textContent = 'Chụp ảnh mã QR';
     setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+    console.log('→ Capture mode');
   }
 
-  var html5QrCode = new Html5Qrcode('reader');
+  // Vòng lặp scan chạy liên tục qua requestAnimationFrame
+  function scanLoop(timestamp) {
+    if (!isScanning) return;
 
-  document.getElementById('qr-file-input').addEventListener('change', function(e) {
-    var file = e.target.files[0];
-    if (!file) return;
-    e.target.value = '';
-    setStatus('busy', 'Đang nhận diện mã QR…');
-    html5QrCode.scanFile(file, false)
-      .then(function(r) { onScanSuccess(r); })
-      .catch(function() {
-        showToast('✗ Không nhận ra mã QR, thử lại', 'fail');
-        setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+    // Đặt frame tiếp theo trước — không bao giờ bỏ lỡ frame
+    animFrameId = requestAnimationFrame(scanLoop);
+
+    // Throttle: chỉ decode 15fps (tránh đốt CPU)
+    if (timestamp - lastScanTime < SCAN_INTERVAL_MS) return;
+    lastScanTime = timestamp;
+
+    // Chờ video sẵn sàng có frame (readyState >= HAVE_CURRENT_DATA)
+    if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth === 0) return;
+
+    // Capture frame hiện tại vào canvas
+    hiddenCanvas.width  = videoElement.videoWidth;
+    hiddenCanvas.height = videoElement.videoHeight;
+    canvasContext.drawImage(videoElement, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+
+    // Lấy pixel data và chạy jsQR
+    try {
+      var imageData = canvasContext.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      var qrResult  = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'  // QR đen trên nền trắng — không cần invert
       });
-  });
 
-  // ── Khởi động scanner ─────────────────────────────────────
-  function khoiDongScanner() {
-    try { html5QrCode.stop(); } catch (e) {}
-    html5QrCode.start(
-      { facingMode: 'environment' },
-      {
-        fps: 15,
-        qrbox: { width: 280, height: 280 }
-      },
-      onScanSuccess,
-      function(err) { console.error('QR error:', String(err)); }
-    ).then(function() {
-      console.log('Scanner started successfully');
+      if (qrResult && qrResult.data) {
+        onQRDetected(qrResult.data);
+      }
+    } catch (decodeError) {
+      // Lỗi decode hiếm gặp — log nhẹ để không làm chậm loop
+      console.warn('jsQR decode: ' + decodeError);
+    }
+  }
+
+  function khoiDongCamera() {
+    // Kiểm tra jsQR đã tải chưa
+    if (typeof jsQR === 'undefined') {
+      console.error('jsQR chưa được tải! Kiểm tra kết nối mạng.');
+      setStatus('error', 'Lỗi tải thư viện jsQR');
+      return;
+    }
+
+    // Kiểm tra trình duyệt có hỗ trợ getUserMedia không
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.log('getUserMedia không được hỗ trợ → chuyển sang chụp ảnh');
+      chuyenSangCaptureMode();
+      return;
+    }
+
+    setStatus('busy', 'Đang mở camera…');
+    console.log('Đang yêu cầu quyền camera…');
+
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        // Ưu tiên camera sau, nhưng không bắt buộc (để iOS Safari chọn camera)
+        facingMode: { ideal: 'environment' }
+      }
+    })
+    .then(function (stream) {
+      cameraStream = stream;
+
+      // Tạo video element
+      videoElement = document.createElement('video');
+      videoElement.setAttribute('playsinline', '');   // BẮT BUỘC cho iOS Safari
+      videoElement.setAttribute('autoplay',    '');
+      videoElement.muted     = true;
+      videoElement.srcObject = stream;
+
+      // Gắn video vào #reader, trước aim-overlay
+      var readerEl = document.getElementById('reader');
+      var overlay  = readerEl.querySelector('.aim-overlay');
+      if (overlay) {
+        readerEl.insertBefore(videoElement, overlay);
+      } else {
+        readerEl.appendChild(videoElement);
+      }
+
+      // Log kích thước video khi metadata sẵn sàng
+      videoElement.addEventListener('loadedmetadata', function () {
+        console.log('Camera: ' + videoElement.videoWidth + 'x' + videoElement.videoHeight);
+
+        // Thử bật continuous autofocus (hoạt động trên Android Chrome, iOS bỏ qua)
+        try {
+          var videoTrack = stream.getVideoTracks()[0];
+          if (videoTrack && videoTrack.applyConstraints) {
+            videoTrack.applyConstraints({
+              advanced: [{ focusMode: 'continuous' }]
+            }).catch(function () {
+              // iOS Safari không hỗ trợ — bình thường
+            });
+          }
+        } catch (e) {}
+      });
+
+      // Bắt đầu play video
+      return videoElement.play();
+    })
+    .then(function () {
+      // Camera đã play → bắt đầu scan loop
+      isScanning = true;
       setStatus('active', 'Sẵn sàng quét');
-      setTimeout(function() {
-        var vid = document.querySelector('#reader video');
-        if (vid) {
-          vid.setAttribute('playsinline', '');
-          vid.play().catch(function(){});
-          try {
-            if (vid.srcObject) {
-              var tracks = vid.srcObject.getVideoTracks();
-              if (tracks && tracks[0] && tracks[0].applyConstraints) {
-                tracks[0].applyConstraints({ width: { ideal: 1280 }, height: { ideal: 720 } })
-                  .catch(function(){});
-              }
-            }
-          } catch (e) {}
-        }
-      }, 500);
-    }).catch(function(err) {
-      console.warn('Camera start failed:', err);
-      switchToCaptureMode();
+      console.log('Camera OK — bắt đầu scan loop 15fps');
+      animFrameId = requestAnimationFrame(scanLoop);
+    })
+    .catch(function (err) {
+      console.error('Lỗi camera: ' + String(err));
+      chuyenSangCaptureMode();
     });
   }
 
-  // ── Khôi phục danh sách tạm nếu lỡ tải lại trang ──────────
-  (function khoiPhucPending() {
-    var saved;
-    try { saved = localStorage.getItem('pendingList'); } catch (e) {}
-    if (!saved) return;
-    var list;
-    try { list = JSON.parse(saved); } catch (e) { return; }
-    if (!list || !list.length) return;
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 15 — FILE CAPTURE FALLBACK
+     Người dùng chụp ảnh QR → decode bằng jsQR từ file ảnh.
+  ══════════════════════════════════════════════════════════ */
+  document.getElementById('qr-file-input').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
 
-    pendingList = list;
-    for (var i = 0; i < list.length; i++) {
-      sessionSet[list[i]] = true;
-      addToSessionList(list[i], '(chưa lưu)');
+    // Reset input để cho phép chọn lại cùng file
+    e.target.value = '';
+
+    setStatus('busy', 'Đang nhận diện mã QR từ ảnh…');
+
+    var fileReader = new FileReader();
+
+    fileReader.onload = function (evt) {
+      var img = new Image();
+
+      img.onload = function () {
+        // Vẽ ảnh vào canvas để lấy pixel data
+        hiddenCanvas.width  = img.width;
+        hiddenCanvas.height = img.height;
+        canvasContext.drawImage(img, 0, 0);
+
+        var imageData = canvasContext.getImageData(0, 0, img.width, img.height);
+
+        // Dùng attemptBoth cho ảnh chụp — có thể bị invert ánh sáng
+        var qrResult = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+
+        if (qrResult && qrResult.data) {
+          console.log('File QR: ' + qrResult.data);
+          onQRDetected(qrResult.data);
+        } else {
+          console.warn('Không tìm thấy QR trong ảnh');
+          showToast('✗ Không nhận ra mã QR — thử chụp lại rõ hơn', 'fail');
+        }
+
+        setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+      };
+
+      img.onerror = function () {
+        console.error('Không đọc được file ảnh');
+        showToast('✗ Không đọc được ảnh', 'fail');
+        setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+      };
+
+      img.src = evt.target.result;
+    };
+
+    fileReader.onerror = function () {
+      console.error('FileReader error');
+      setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+    };
+
+    fileReader.readAsDataURL(file);
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 16 — KHÔI PHỤC PENDING LIST KHI TẢI LẠI TRANG
+     Nếu người dùng vô tình tải lại trang, không mất dữ liệu.
+  ══════════════════════════════════════════════════════════ */
+  (function khoiPhucPendingList() {
+    var raw;
+    try { raw = localStorage.getItem('pendingList'); } catch (e) { return; }
+    if (!raw) return;
+
+    var savedList;
+    try { savedList = JSON.parse(raw); } catch (e) { return; }
+    if (!savedList || !savedList.length) return;
+
+    pendingList = savedList;
+
+    // Khôi phục UI (không tạo lại từ đầu, chỉ đánh dấu đã quét)
+    for (var i = 0; i < savedList.length; i++) {
+      sessionSet[savedList[i]] = true;
+      themVaoSessionList(savedList[i], '(chưa đồng bộ)');
     }
-    capNhatNutLuu();
-    showToast('Đã khôi phục ' + list.length + ' mã chưa lưu', 'warn');
+
+    capNhatNutDongBo();
+    showToast('Đã khôi phục ' + savedList.length + ' mã chờ đồng bộ', 'warn');
+    console.log('Khôi phục ' + savedList.length + ' mã từ localStorage');
   })();
 
-  // Hiện thẻ "Còn thiếu" ngay khi mở app
+  /* ══════════════════════════════════════════════════════════
+     PHẦN 17 — KHỞI ĐỘNG ỨNG DỤNG
+  ══════════════════════════════════════════════════════════ */
+
+  // Hiển thị thẻ "Còn thiếu" ngay khi mở app
   capNhatThieu();
 
-  // Tự khởi động nếu đã có URL
-  if (GAS_API_URL) { khoiDongScanner(); }
+  // Tự khởi động camera nếu đã có URL cấu hình
+  if (GAS_API_URL) {
+    khoiDongCamera();
+  }
 </script>
 </body>
 </html>
