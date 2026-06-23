@@ -131,7 +131,15 @@
       position: absolute; inset: 0; pointer-events: none; z-index: 10;
       display: flex; align-items: center; justify-content: center;
     }
-    .aim-box { width: 82%; height: 82%; position: relative; }
+    .aim-box { width: 90%; height: 90%; position: relative; }
+
+    /* Nháy màn hình xanh khi bắt được mã mới */
+    #flash {
+      position: fixed; inset: 0; background: #00d4aa;
+      opacity: 0; pointer-events: none; z-index: 998;
+      transition: opacity 0.07s ease;
+    }
+    #flash.on { opacity: 0.4; }
     .aim-box::before, .aim-box::after, .aim-box span::before, .aim-box span::after {
       content: ''; position: absolute; width: 22px; height: 22px;
       border-color: #00d4aa; border-style: solid;
@@ -236,10 +244,11 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v10-pan</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v11-fast</p>
   </header>
 
   <div id="toast"></div>
+  <div id="flash"></div>
 
   <!-- Bước cấu hình URL (chỉ hiện lần đầu) -->
   <div id="config-card">
@@ -482,6 +491,13 @@
     } catch (e) {}
   }
 
+  // Nháy màn hình xanh báo bắt được mã mới
+  var flashEl = document.getElementById('flash');
+  function nhayMan() {
+    flashEl.classList.add('on');
+    setTimeout(function() { flashEl.classList.remove('on'); }, 110);
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function showToast(msg, type) {
     toast.textContent = msg;
@@ -533,7 +549,8 @@
     addToSessionList(maHS, thoiGian + ' (chưa lưu)');
     showToast('✓ Đã quét: ' + maHS, 'success');
     setStatus('active', 'Sẵn sàng quét');
-    beep(true);
+    beep(true);      // tiếng bíp báo bắt được mã mới
+    nhayMan();       // nháy màn hình xanh
     capNhatNutLuu();
     capNhatThieu();
   }
@@ -554,21 +571,24 @@
     window.location.href = url;
   }
 
-  // ── Xử lý mã quét ────────────────────────────────────────
+  // ── Xử lý mã quét — camera LUÔN chạy liên tục, không pause ──
   function onScanSuccess(decodedText) {
     var maHS = decodedText.trim();
     if (!maHS) return;
+
+    // Chống đọc lặp cùng mã trong tích tắc (không phải chặn vĩnh viễn)
     if (maHS === lastRawCode) return;
     lastRawCode = maHS;
     setTimeout(function() { if (lastRawCode === maHS) lastRawCode = ''; }, cooldownMs);
 
+    // ĐÃ quét rồi → BỎ QUA ÂM THẦM (không bíp, không thông báo), camera vẫn quét
     if (sessionSet[maHS]) {
       dupCount++;
       dupEl.textContent = dupCount;
-      beep(false);
-      showToast('⚠ ' + maHS + ' đã điểm danh rồi!', 'warn');
       return;
     }
+
+    // Mã MỚI → bíp + nháy + thêm vào danh sách
     guiDiemDanh(maHS);
   }
 
@@ -598,10 +618,15 @@
   // ── Khởi động scanner ─────────────────────────────────────
   function khoiDongScanner() {
     html5QrCode.start(
-      { facingMode: 'environment' },
       {
-        fps: 25,                                    // quét nhanh hơn để lia camera
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.82; return {width:s,height:s}; }, // vùng quét rộng
+        facingMode: 'environment',
+        width:  { ideal: 1280 },                    // độ nét cao → đọc QR từ xa
+        height: { ideal: 720 },
+        advanced: [{ focusMode: 'continuous' }]     // tự lấy nét khi lia camera
+      },
+      {
+        fps: 30,                                    // quét cực nhanh để lia camera
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.9; return {width:s,height:s}; }, // vùng quét ~toàn khung
         aspectRatio: 1.0,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
       },
