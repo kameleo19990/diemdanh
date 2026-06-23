@@ -244,7 +244,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v19-pro</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v20</p>
   </header>
 
   <div id="toast"></div>
@@ -626,13 +626,13 @@
 
   // ── Khởi động scanner ─────────────────────────────────────
   function khoiDongScanner() {
-    try { html5QrCode.stop(); } catch (e) {}  // stop trước nếu đang chạy từ lần cũ
+    try { html5QrCode.stop(); } catch (e) {}
     html5QrCode.start(
-      { facingMode: 'environment', focusMode: 'continuous' },  // liên tục lấy nét cho iPhone
+      { facingMode: 'environment' },
       {
-        fps: 15,                                    // tốc độ tối ưu — đủ mượt không đơ Safari
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.85; return {width:s,height:s}; }, // vùng quét 85%
-        disableFlip: false                          // cho phép lật hình nếu cần
+        fps: 15,
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.85; return {width:s,height:s}; },
+        disableFlip: false
       },
       onScanSuccess,
       function(){}
@@ -641,10 +641,8 @@
       setTimeout(function() {
         var vid = document.querySelector('#reader video');
         if (vid) {
-          // Ép video play trên iOS Safari (fix màn hình đen)
           vid.setAttribute('playsinline', '');
           vid.play().catch(function(){});
-          // Thử NÂNG độ phân giải sau khi camera đã chạy (lỗi cũng không sao)
           try {
             if (vid.srcObject) {
               var tracks = vid.srcObject.getVideoTracks();
@@ -656,7 +654,8 @@
           } catch (e) {}
         }
       }, 500);
-    }).catch(function() {
+    }).catch(function(err) {
+      console.warn('Camera start failed:', err);
       switchToCaptureMode();
     });
   }
