@@ -1,680 +1,316 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Điểm Danh Học Sinh</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+var SHEET_NAME = 'LichSu';
+var SPREADSHEET_ID = '17Wa4WGeWqHIQLqiLrYxidwXWtrTwpDvnfBu00tdYwJU';
 
-    body {
-      background: #0f0f13;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 28px 16px 40px;
-      gap: 20px;
-    }
-
-    header { text-align: center; }
-    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
-    header p  { margin-top: 4px; font-size: 0.85rem; color: #6b7280; }
-
-    /* ── Config card (hiện khi chưa có URL) ── */
-    #config-card {
-      background: #1a1a24;
-      border: 1px solid #f59e0b55;
-      border-radius: 16px;
-      padding: 20px;
-      width: 100%; max-width: 380px;
-      display: flex; flex-direction: column; gap: 12px;
-    }
-    #config-card h2 { font-size: 0.85rem; color: #fcd34d; display: flex; align-items: center; gap: 6px; }
-    #config-card p  { font-size: 0.8rem; color: #9ca3af; line-height: 1.5; }
-    #gas-url-input {
-      width: 100%; padding: 10px 12px;
-      background: #111118; border: 1px solid #2a2a3a;
-      border-radius: 8px; color: #e0e0e0; font-size: 0.82rem;
-      outline: none;
-    }
-    #gas-url-input:focus { border-color: #00d4aa; }
-    #btn-save-url {
-      background: #00d4aa; color: #0f0f13;
-      border: none; border-radius: 8px;
-      padding: 10px; font-size: 0.88rem; font-weight: 700;
-      cursor: pointer; transition: background 0.2s;
-    }
-    #btn-save-url:hover { background: #00b894; }
-
-    /* Nút lưu vào sheet (batch) */
-    #btn-luu-sheet {
-      display: none;
-      width: 100%; max-width: 380px;
-      background: #00d4aa; color: #0f0f13;
-      border: none; border-radius: 14px;
-      padding: 16px; font-size: 1.05rem; font-weight: 800;
-      cursor: pointer; transition: background 0.2s, transform 0.1s;
-      box-shadow: 0 4px 20px #00d4aa33;
-    }
-    #btn-luu-sheet:active { background: #00b894; transform: scale(0.98); }
-    .hint-chua-luu {
-      font-size: 0.72rem; color: #f59e0b; text-align: center;
-      max-width: 380px;
-    }
-
-    /* Thẻ "Còn thiếu" */
-    #card-thieu {
-      display: none;
-      width: 100%; max-width: 380px;
-      background: #1a1a24; border: 1px solid #ef444455;
-      border-radius: 16px; padding: 16px 20px;
-    }
-    #card-thieu h2 {
-      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
-      color: #f87171; margin-bottom: 10px;
-    }
-    #list-thieu { display: flex; flex-wrap: wrap; gap: 6px; }
-    #list-thieu .chip {
-      background: #2a1414; border: 1px solid #ef444433;
-      color: #fca5a5; border-radius: 6px;
-      padding: 5px 10px; font-size: 0.8rem;
-    }
-    #list-thieu .done-all { color: #00d4aa; font-size: 0.85rem; padding: 6px 0; }
-    .btn-tai-ds {
-      background: none; border: 1px dashed #374151; border-radius: 8px;
-      color: #9ca3af; padding: 5px 10px; font-size: 0.72rem; cursor: pointer;
-    }
-    .btn-tai-ds:hover { border-color: #00d4aa; color: #00d4aa; }
-
-    /* ── Main UI (ẩn khi chưa config) ── */
-    #main-ui { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
-
-    /* Counter */
-    .counter-row { display: flex; gap: 12px; width: 100%; max-width: 380px; }
-    .counter-box {
-      flex: 1; background: #1a1a24; border: 1px solid #2a2a3a;
-      border-radius: 14px; padding: 14px 16px;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-    }
-    .counter-box.highlight { border-color: #00d4aa33; background: #0d2420; }
-    .counter-num   { font-size: 2rem; font-weight: 800; color: #00d4aa; line-height: 1; }
-    .counter-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-
-    /* Scanner card */
-    .scanner-card {
-      background: #1a1a24; border: 1px solid #2a2a3a;
-      border-radius: 16px; padding: 20px;
-      width: 100%; max-width: 380px;
-      display: flex; flex-direction: column; align-items: center; gap: 16px;
-    }
-    .scanner-label { font-size: 0.8rem; color: #9ca3af; letter-spacing: 0.06em; text-transform: uppercase; }
-
-    /* Live camera */
-    #reader {
-      width: 100%; max-width: 320px;
-      height: 320px;                      /* iOS không hiểu aspect-ratio tốt */
-      border-radius: 12px; overflow: hidden; position: relative; background: #000;
-      -webkit-transform: translateZ(0);   /* Buộc GPU layer trên Safari */
-    }
-    #reader video {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      position: absolute !important;
-      top: 0 !important; left: 0 !important;
-    }
-    .aim-overlay {
-      position: absolute; inset: 0; pointer-events: none; z-index: 10;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .aim-box { width: 90%; height: 90%; position: relative; }
-
-    /* Nháy màn hình xanh khi bắt được mã mới */
-    #flash {
-      position: fixed; inset: 0; background: #00d4aa;
-      opacity: 0; pointer-events: none; z-index: 998;
-      transition: opacity 0.07s ease;
-    }
-    #flash.on { opacity: 0.4; }
-    .aim-box::before, .aim-box::after, .aim-box span::before, .aim-box span::after {
-      content: ''; position: absolute; width: 22px; height: 22px;
-      border-color: #00d4aa; border-style: solid;
-    }
-    .aim-box::before      { top:0;    left:0;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-    .aim-box::after       { top:0;    right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
-    .aim-box span::before { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
-    .aim-box span::after  { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
-    .scan-line {
-      position: absolute; left:0; right:0; height:2px; top:0;
-      background: linear-gradient(90deg, transparent, #00d4aa, transparent);
-      animation: scanMove 2s linear infinite;
-    }
-    @keyframes scanMove {
-      0%   { top:0%;   opacity:0; } 10% { opacity:1; }
-      90%  { opacity:1; }           100%{ top:100%; opacity:0; }
-    }
-
-    /* Capture fallback */
-    #capture-mode { display:none; flex-direction:column; align-items:center; gap:16px; width:100%; }
-    .capture-icon {
-      width:110px; height:110px; border-radius:50%;
-      background:#111118; border:2px dashed #2a2a3a;
-      display:flex; align-items:center; justify-content:center; font-size:2.8rem;
-    }
-    .capture-hint { font-size:0.82rem; color:#6b7280; text-align:center; line-height:1.5; }
-    #capture-btn {
-      display:inline-flex; align-items:center; gap:10px;
-      background:#00d4aa; color:#0f0f13; border:none; border-radius:10px;
-      padding:14px 28px; font-size:0.95rem; font-weight:700; cursor:pointer;
-      transition:background 0.2s, transform 0.1s;
-      width:100%; max-width:280px; justify-content:center;
-    }
-    #capture-btn:active { background:#00b894; transform:scale(0.97); }
-    #qr-file-input { display:none; }
-
-    /* Status */
-    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#9ca3af; }
-    .dot { width:8px; height:8px; border-radius:50%; background:#374151; flex-shrink:0; transition:background 0.3s; }
-    .dot.active { background:#00d4aa; box-shadow:0 0 6px #00d4aa88; }
-    .dot.busy   { background:#f59e0b; box-shadow:0 0 6px #f59e0b88; }
-    .dot.error  { background:#ef4444; box-shadow:0 0 6px #ef444488; }
-
-    /* Toast */
-    #toast {
-      position:fixed; top:20px; left:50%;
-      transform:translateX(-50%) translateY(-80px);
-      padding:12px 22px; border-radius:10px;
-      font-size:0.88rem; font-weight:600;
-      z-index:999; opacity:0; pointer-events:none;
-      max-width:90vw; text-align:center;
-      transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
-    }
-    #toast.show    { transform:translateX(-50%) translateY(0); opacity:1; }
-    #toast.success { background:#064e3b; border:1px solid #00d4aa; color:#6ee7b7; }
-    #toast.fail    { background:#450a0a; border:1px solid #ef4444; color:#fca5a5; }
-    #toast.warn    { background:#451a03; border:1px solid #f59e0b; color:#fcd34d; }
-
-    /* Session list */
-    .session-card {
-      background:#1a1a24; border:1px solid #2a2a3a;
-      border-radius:16px; padding:16px 20px;
-      width:100%; max-width:380px;
-    }
-    .session-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-    .session-header h2 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:#6b7280; }
-    .session-actions { display:flex; gap:8px; }
-    .btn-ghost {
-      background:none; border:1px solid #374151; border-radius:7px;
-      padding:5px 10px; font-size:0.75rem; color:#9ca3af;
-      cursor:pointer; transition:border-color 0.2s, color 0.2s;
-    }
-    .btn-ghost:hover       { border-color:#6b7280; color:#e0e0e0; }
-    .btn-ghost.danger:hover{ border-color:#ef4444; color:#f87171; }
-
-    #session-list {
-      list-style:none; display:flex; flex-direction:column; gap:8px;
-      max-height:320px; overflow-y:auto;
-    }
-    #session-list::-webkit-scrollbar      { width:4px; }
-    #session-list::-webkit-scrollbar-track{ background:transparent; }
-    #session-list::-webkit-scrollbar-thumb{ background:#2a2a3a; border-radius:2px; }
-
-    #session-list li {
-      display:flex; justify-content:space-between; align-items:center;
-      background:#111118; border-radius:8px; padding:10px 14px;
-      font-size:0.85rem; animation:slideIn 0.25s ease;
-    }
-    @keyframes slideIn {
-      from { opacity:0; transform:translateY(-5px); }
-      to   { opacity:1; transform:translateY(0); }
-    }
-    .item-left  { display:flex; align-items:center; gap:10px; }
-    .item-index { font-size:0.72rem; color:#374151; min-width:22px; }
-    .item-ma    { font-weight:700; color:#a5f3fc; }
-    .item-time  { color:#6b7280; font-size:0.78rem; }
-    .empty-msg  { text-align:center; color:#374151; font-size:0.82rem; padding:12px 0; }
-  </style>
-</head>
-<body>
-
-  <header>
-    <h1>Điểm Danh Học Sinh</h1>
-    <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v13-fast</p>
-  </header>
-
-  <div id="toast"></div>
-  <div id="flash"></div>
-
-  <!-- Bước cấu hình URL (chỉ hiện lần đầu) -->
-  <div id="config-card">
-    <h2>⚙ Cấu hình lần đầu</h2>
-    <p>Dán URL Apps Script đã deploy vào ô bên dưới. Chỉ cần làm một lần, ứng dụng sẽ ghi nhớ.</p>
-    <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
-    <button id="btn-save-url" onclick="luuCauHinh()">Lưu và bắt đầu</button>
-  </div>
-
-  <!-- Giao diện chính -->
-  <div id="main-ui">
-
-    <div class="counter-row">
-      <div class="counter-box highlight">
-        <span class="counter-num" id="count-scanned">0</span>
-        <span class="counter-label">Đã điểm danh</span>
-      </div>
-      <div class="counter-box">
-        <span class="counter-num" id="count-dup" style="color:#f59e0b">0</span>
-        <span class="counter-label">Quét trùng</span>
-      </div>
-    </div>
-
-    <button id="btn-luu-sheet" onclick="luuVaoSheet()">⬆ Lưu vào Sheet</button>
-    <p class="hint-chua-luu" id="hint-chua-luu" style="display:none">
-      Các mã đã quét đang lưu tạm trong máy. Bấm "Lưu vào Sheet" để ghi lên Google Sheet.
-    </p>
-
-    <div id="card-thieu">
-      <h2 style="display:flex;justify-content:space-between;align-items:center">
-        <span id="thieu-title">Còn thiếu</span>
-        <button class="btn-tai-ds" onclick="taiDanhSachLop()">↻ Tải lại DS lớp</button>
-      </h2>
-      <div id="list-thieu"></div>
-    </div>
-
-    <div class="scanner-card">
-      <span class="scanner-label" id="mode-label">Camera quét mã QR</span>
-
-      <div id="reader">
-        <div class="aim-overlay">
-          <div class="aim-box"><span></span><div class="scan-line"></div></div>
-        </div>
-      </div>
-
-      <div id="capture-mode">
-        <div class="capture-icon">📷</div>
-        <p class="capture-hint">Nhấn nút để mở camera,<br>chụp ảnh mã QR của học sinh</p>
-        <button id="capture-btn" onclick="document.getElementById('qr-file-input').click()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-            <circle cx="12" cy="13" r="4"/>
-          </svg>
-          Chụp mã QR
-        </button>
-        <input type="file" id="qr-file-input" accept="image/*" capture="environment" />
-      </div>
-
-      <div class="status-row">
-        <div class="dot" id="status-dot"></div>
-        <span id="status-text">Đang khởi động…</span>
-      </div>
-    </div>
-
-    <div class="session-card">
-      <div class="session-header">
-        <h2>Danh sách buổi học</h2>
-        <div class="session-actions">
-          <button class="btn-ghost" onclick="doiCauHinh()" title="Đổi URL GAS">⚙</button>
-          <button class="btn-ghost danger" onclick="batDauBuoiMoi()">↺ Buổi mới</button>
-        </div>
-      </div>
-      <ul id="session-list">
-        <li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>
-      </ul>
-    </div>
-
-  </div><!-- /main-ui -->
-
-<script>
-  // ── Cấu hình ──────────────────────────────────────────────
-  var GAS_API_URL = localStorage.getItem('gasUrl') || '';
-
-  function luuCauHinh() {
-    var url = document.getElementById('gas-url-input').value.trim();
-    if (!url || !url.startsWith('https://')) {
-      alert('URL không hợp lệ. Phải bắt đầu bằng https://');
-      return;
-    }
-    localStorage.setItem('gasUrl', url);
-    GAS_API_URL = url;
-    document.getElementById('config-card').style.display = 'none';
-    document.getElementById('main-ui').style.display     = 'flex';
-    capNhatThieu();
-    khoiDongScanner();
-  }
-
-  function doiCauHinh() {
-    localStorage.removeItem('gasUrl');
-    document.getElementById('config-card').style.display = '';
-    document.getElementById('main-ui').style.display     = 'none';
-  }
-
-  // Nếu đã có URL, bỏ qua màn hình config
-  if (GAS_API_URL) {
-    document.getElementById('config-card').style.display = 'none';
-    document.getElementById('main-ui').style.display     = 'flex';
-  }
-
-  // ── Trạng thái buổi học ───────────────────────────────────
-  var sessionSet   = {};
-  var pendingList  = [];     // các mã đã quét, chờ lưu lên sheet
-  var classList    = [];     // danh sách lớp [{ma, ten}] để tính vắng
-  var scanCount    = 0;
-  var dupCount     = 0;
-  var lastRawCode  = '';
-  var cooldownMs   = 1000;
-  var toastTimer   = null;
-  var emptyMsgEl   = document.getElementById('empty-msg');
-
-  var dot         = document.getElementById('status-dot');
-  var statusText  = document.getElementById('status-text');
-  var toast       = document.getElementById('toast');
-  var sessionList = document.getElementById('session-list');
-  var modeLabel   = document.getElementById('mode-label');
-  var countEl     = document.getElementById('count-scanned');
-  var dupEl       = document.getElementById('count-dup');
-  var btnLuu      = document.getElementById('btn-luu-sheet');
-  var hintChuaLuu = document.getElementById('hint-chua-luu');
-
-  // Hiện ngày
-  (function() {
-    document.getElementById('header-date').textContent =
-      new Date().toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
-  })();
-
-  // Tải danh sách lớp đã lưu trong máy
-  try {
-    var clSaved = localStorage.getItem('classList');
-    if (clSaved) classList = JSON.parse(clSaved) || [];
-  } catch (e) { classList = []; }
-
-  // ── Xử lý khi quay lại từ trang lưu / tải danh sách ───────
-  (function xuLyQuayLai() {
-    var params = new URLSearchParams(location.search);
-
-    if (params.has('saved')) {
-      var n = params.get('saved');
-      try { localStorage.removeItem('pendingList'); } catch (e) {}
-      pendingList = [];
-      history.replaceState({}, '', location.pathname);
-      setTimeout(function() {
-        showToast('✓ Đã lưu ' + n + ' học sinh vào Sheet!', 'success');
-      }, 700);
-    }
-
-    if (params.has('ds')) {
-      try {
-        classList = JSON.parse(params.get('ds')) || [];
-        localStorage.setItem('classList', JSON.stringify(classList));
-        setTimeout(function() {
-          showToast('📋 Đã tải DS lớp: ' + classList.length + ' học sinh', 'success');
-        }, 500);
-      } catch (e) {}
-      history.replaceState({}, '', location.pathname);
-    }
-  })();
-
-  // ── Tải danh sách lớp (điều hướng top-level) ──────────────
-  function taiDanhSachLop() {
-    var returnUrl = location.origin + location.pathname;
-    window.location.href = GAS_API_URL
-      + '?action=loadDS&returnUrl=' + encodeURIComponent(returnUrl);
-  }
-
-  // ── Cập nhật thẻ "Còn thiếu" ──────────────────────────────
-  function capNhatThieu() {
-    var card  = document.getElementById('card-thieu');
-    var list  = document.getElementById('list-thieu');
-    var title = document.getElementById('thieu-title');
-    card.style.display = 'block';
-
-    if (!classList.length) {
-      title.textContent = 'Danh sách lớp';
-      list.innerHTML = '<button class="btn-tai-ds" style="font-size:0.85rem;padding:10px 16px" '
-        + 'onclick="taiDanhSachLop()">📥 Tải danh sách lớp để xem ai còn thiếu</button>';
-      return;
-    }
-
-    var absent = classList.filter(function(s) { return !sessionSet[s.ma]; });
-    title.textContent = 'Còn thiếu (' + absent.length + '/' + classList.length + ')';
-    if (absent.length === 0) {
-      list.innerHTML = '<div class="done-all">✓ Đã quét đủ cả lớp!</div>';
-    } else {
-      list.innerHTML = absent.map(function(s) {
-        return '<span class="chip">' + escHtml(s.ten || s.ma) + '</span>';
-      }).join('');
+function getSheet(name) {
+  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    if (name === SHEET_NAME) {
+      sheet.appendRow(['Thời gian', 'Mã HS']); // tiêu đề cột
     }
   }
+  return sheet;
+}
 
-  // ── Lưu / khôi phục danh sách tạm ─────────────────────────
-  function luuPending() {
-    try { localStorage.setItem('pendingList', JSON.stringify(pendingList)); } catch (e) {}
-  }
-  function capNhatNutLuu() {
-    if (pendingList.length > 0) {
-      btnLuu.style.display = 'block';
-      btnLuu.textContent = '⬆ Lưu ' + pendingList.length + ' học sinh vào Sheet';
-      hintChuaLuu.style.display = 'block';
-    } else {
-      btnLuu.style.display = 'none';
-      hintChuaLuu.style.display = 'none';
+// doGet xử lý cả 2 vai trò:
+//   - Không có tham số  → trả về trang HTML (khi host trên GAS)
+//   - ?action=diemDanh  → API endpoint cho frontend bên ngoài (GitHub Pages)
+function doGet(e) {
+  var action   = e.parameter && e.parameter.action;
+  var callback = e.parameter && e.parameter.callback; // JSONP support
+
+  if (action === 'diemDanh') {
+    var obj = xuLyDiemDanh_obj(e.parameter.maHS);
+    if (callback) {
+      // Trả về JSONP — tránh CORS trên Safari iOS
+      return ContentService.createTextOutput(callback + '(' + JSON.stringify(obj) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
+    return jsonResponse(obj);
   }
 
-  // ── Âm thanh "bíp" khi quét được (giúp lia camera không cần nhìn) ──
-  var audioCtx = null;
-  function moKhoaAudio() {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    } catch (e) {}
-  }
-  // iOS cần 1 lần chạm để bật âm thanh
-  document.addEventListener('touchstart', moKhoaAudio, { once: false });
-  document.addEventListener('click', moKhoaAudio, { once: false });
-
-  function beep(ok) {
-    try {
-      if (!audioCtx) return;
-      var o = audioCtx.createOscillator();
-      var g = audioCtx.createGain();
-      o.connect(g); g.connect(audioCtx.destination);
-      o.type = 'sine';
-      o.frequency.value = ok ? 920 : 320;   // bắt mới: cao | trùng: thấp
-      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.13);
-      o.start();
-      o.stop(audioCtx.currentTime + 0.13);
-    } catch (e) {}
+  if (action === 'inQR') {
+    return taoTrangInQR();
   }
 
-  // Nháy màn hình xanh báo bắt được mã mới
-  var flashEl = document.getElementById('flash');
-  function nhayMan() {
-    flashEl.classList.add('on');
-    setTimeout(function() { flashEl.classList.remove('on'); }, 110);
+  if (action === 'batch') {
+    return xuLyBatch(e.parameter.codes, e.parameter.returnUrl);
   }
 
-  // ── Helpers ───────────────────────────────────────────────
-  function showToast(msg, type) {
-    toast.textContent = msg;
-    toast.className   = 'show ' + type;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function() { toast.className = ''; }, 3000);
-  }
-  function setStatus(state, text) {
-    dot.className = 'dot ' + state;
-    statusText.textContent = text;
-  }
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  function addToSessionList(maHS, thoiGian) {
-    if (emptyMsgEl) { emptyMsgEl.remove(); emptyMsgEl = null; }
-    scanCount++;
-    countEl.textContent = scanCount;
-    var li = document.createElement('li');
-    li.innerHTML =
-      '<span class="item-left"><span class="item-index">' + scanCount + '.</span>' +
-      '<span class="item-ma">' + escHtml(maHS) + '</span></span>' +
-      '<span class="item-time">' + escHtml(thoiGian) + '</span>';
-    sessionList.insertBefore(li, sessionList.firstChild);
+  if (action === 'loadDS') {
+    return trangTaiDanhSach(e.parameter.returnUrl);
   }
 
-  // ── Buổi mới ─────────────────────────────────────────────
-  function batDauBuoiMoi() {
-    if (pendingList.length > 0 && !confirm('Còn ' + pendingList.length + ' HS chưa lưu lên Sheet. Bắt đầu buổi mới sẽ xóa hết. Tiếp tục?')) return;
-    sessionSet = {}; pendingList = []; scanCount = 0; dupCount = 0;
-    try { localStorage.removeItem('pendingList'); } catch (e) {}
-    countEl.textContent = '0'; dupEl.textContent = '0';
-    sessionList.innerHTML = '<li class="empty-msg" id="empty-msg">Chưa có học sinh nào được điểm danh.</li>';
-    emptyMsgEl = document.getElementById('empty-msg');
-    capNhatNutLuu();
-    capNhatThieu();
-    setStatus('active', 'Sẵn sàng quét');
-    showToast('Đã bắt đầu buổi học mới', 'success');
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('Điểm Danh Học Sinh')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// Ghi nhiều mã HS cùng lúc rồi hiện trang TỔNG KẾT VẮNG + báo Zalo
+function xuLyBatch(codesStr, returnUrl) {
+  var sheet = getSheet(SHEET_NAME);
+  var codes = (codesStr || '').split(',');
+  var tz = Session.getScriptTimeZone();
+  var count = 0;
+
+  for (var i = 0; i < codes.length; i++) {
+    var maHS = codes[i].trim();
+    if (!maHS) continue;
+    var ts = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm:ss');
+    sheet.appendRow([ts, maHS]);
+    count++;
   }
 
-  // ── Lưu tạm mã quét (KHÔNG gọi mạng — iOS chặn request ngầm) ──
-  function guiDiemDanh(maHS) {
-    var thoiGian = new Date().toLocaleString('vi-VN', {
-      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
-    });
-    sessionSet[maHS] = true;
-    pendingList.push(maHS);
-    luuPending();
-    addToSessionList(maHS, thoiGian + ' (chưa lưu)');
-    showToast('✓ Đã quét: ' + maHS, 'success');
-    setStatus('active', 'Sẵn sàng quét');
-    beep(true);      // tiếng bíp báo bắt được mã mới
-    nhayMan();       // nháy màn hình xanh
-    capNhatNutLuu();
-    capNhatThieu();
+  SpreadsheetApp.flush();   // đẩy dữ liệu xuống sheet TRƯỚC khi tính vắng
+
+  return trangTongKet(returnUrl, count);
+}
+
+// Tải danh sách lớp về app (qua điều hướng top-level, hợp iPhone)
+function trangTaiDanhSach(returnUrl) {
+  var ds = getSheet('DanhSach').getDataRange().getValues();
+  var arr = [];
+  for (var j = 1; j < ds.length; j++) {   // bỏ tiêu đề
+    var ma = String(ds[j][0]).trim();
+    if (!ma) continue;
+    arr.push({ ma: ma, ten: String(ds[j][1] || '').trim() });
   }
 
-  // ── Gửi cả lô lên Google Sheet (điều hướng top-level) ──────
-  function luuVaoSheet() {
-    if (pendingList.length === 0) return;
-    if (!confirm('Lưu ' + pendingList.length + ' học sinh lên Google Sheet?')) return;
+  var data = encodeURIComponent(JSON.stringify(arr));
+  var dest = returnUrl + (returnUrl.indexOf('?') >= 0 ? '&' : '?') + 'ds=' + data;
 
-    var returnUrl = location.origin + location.pathname;
-    var url = GAS_API_URL
-      + '?action=batch'
-      + '&codes=' + encodeURIComponent(pendingList.join(','))
-      + '&returnUrl=' + encodeURIComponent(returnUrl);
+  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+    + '<title>Tải danh sách</title><style>'
+    + 'body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    + 'background:#0f0f13;color:#e0e0e0;font-family:sans-serif;gap:20px;padding:24px;text-align:center}'
+    + '.ok{font-size:3rem}.big{font-size:1.2rem;font-weight:700;color:#00d4aa}'
+    + 'a.btn{display:inline-block;background:#00d4aa;color:#0f0f13;text-decoration:none;'
+    + 'padding:16px 32px;border-radius:12px;font-size:1.05rem;font-weight:700}'
+    + '</style></head><body>'
+    + '<div class="ok">📋</div>'
+    + '<div class="big">Đã tải danh sách lớp: ' + arr.length + ' học sinh</div>'
+    + '<a class="btn" href="' + dest + '">← Về app điểm danh</a>'
+    + '</body></html>';
 
-    setStatus('busy', 'Đang lưu lên Sheet…');
-    // Điều hướng trực tiếp — cách duy nhất chạy được trên iPhone
-    window.location.href = url;
+  return HtmlService.createHtmlOutput(html).setTitle('Tải danh sách lớp');
+}
+
+function escHtmlGS(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Chuẩn hóa SĐT cho link Zalo (bỏ ký tự thừa, +84 → 0)
+function chuanHoaSDT(sdt) {
+  var s = String(sdt || '').replace(/[^0-9]/g, '');
+  if (s.indexOf('84') === 0 && s.length >= 11) s = '0' + s.substring(2);
+  return s;
+}
+
+// Tính học sinh vắng & dựng trang tổng kết
+function trangTongKet(returnUrl, justSaved) {
+  var tz = Session.getScriptTimeZone();
+  var homNay = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy');
+
+  // Các mã có mặt hôm nay (từ LichSu)
+  // Cột thời gian có thể là chuỗi HOẶC kiểu Date (Sheets tự chuyển) → xử lý cả 2
+  var ls = getSheet(SHEET_NAME).getDataRange().getValues();
+  var coMat = {};
+  for (var i = 1; i < ls.length; i++) {
+    var raw = ls[i][0];
+    var ma  = String(ls[i][1]).trim();
+    if (!ma) continue;
+    var ngay = (raw instanceof Date)
+      ? Utilities.formatDate(raw, tz, 'dd/MM/yyyy')
+      : String(raw).substring(0, 10);
+    if (ngay === homNay) coMat[ma] = true;
   }
 
-  // ── Xử lý mã quét — camera LUÔN chạy liên tục, không pause ──
-  function onScanSuccess(decodedText) {
-    var maHS = decodedText.trim();
-    if (!maHS) return;
-
-    // Chống đọc lặp cùng mã trong tích tắc (không phải chặn vĩnh viễn)
-    if (maHS === lastRawCode) return;
-    lastRawCode = maHS;
-    setTimeout(function() { if (lastRawCode === maHS) lastRawCode = ''; }, cooldownMs);
-
-    // ĐÃ quét rồi → BỎ QUA ÂM THẦM (không bíp, không thông báo), camera vẫn quét
-    if (sessionSet[maHS]) {
-      dupCount++;
-      dupEl.textContent = dupCount;
-      return;
-    }
-
-    // Mã MỚI → bíp + nháy + thêm vào danh sách
-    guiDiemDanh(maHS);
-  }
-
-  // ── Capture mode fallback ─────────────────────────────────
-  function switchToCaptureMode() {
-    document.getElementById('reader').style.display       = 'none';
-    document.getElementById('capture-mode').style.display = 'flex';
-    modeLabel.textContent = 'Chụp ảnh mã QR';
-    setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
-  }
-
-  var html5QrCode = new Html5Qrcode('reader');
-
-  document.getElementById('qr-file-input').addEventListener('change', function(e) {
-    var file = e.target.files[0];
-    if (!file) return;
-    e.target.value = '';
-    setStatus('busy', 'Đang nhận diện mã QR…');
-    html5QrCode.scanFile(file, false)
-      .then(function(r) { onScanSuccess(r); })
-      .catch(function() {
-        showToast('✗ Không nhận ra mã QR, thử lại', 'fail');
-        setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+  // Danh sách lớp → tính vắng
+  var ds = getSheet('DanhSach').getDataRange().getValues();
+  var vang = [];
+  var siSo = 0;
+  for (var j = 1; j < ds.length; j++) {  // bỏ dòng tiêu đề
+    var maD = String(ds[j][0]).trim();
+    if (!maD) continue;
+    siSo++;
+    if (!coMat[maD]) {
+      vang.push({
+        ma:  maD,
+        ten: String(ds[j][1] || '').trim(),
+        lop: String(ds[j][2] || '').trim(),
+        sdt: chuanHoaSDT(ds[j][3])
       });
-  });
+    }
+  }
+  var soComat = siSo - vang.length;
 
-  // ── Khởi động scanner ─────────────────────────────────────
-  function khoiDongScanner() {
-    html5QrCode.start(
-      { facingMode: 'environment' },                // cấu hình tối giản — luôn chạy được
-      {
-        fps: 30,                                    // quét cực nhanh để lia camera
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.9; return {width:s,height:s}; }, // vùng quét ~toàn khung
-        aspectRatio: 1.0,
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-      },
-      onScanSuccess,
-      function(){}
-    ).then(function() {
-      setStatus('active', 'Sẵn sàng quét');
-      setTimeout(function() {
-        var vid = document.querySelector('#reader video');
-        if (vid) {
-          // Ép video play trên iOS Safari (fix màn hình đen)
-          vid.setAttribute('playsinline', '');
-          vid.play().catch(function(){});
-          // Thử NÂNG độ phân giải sau khi camera đã chạy (lỗi cũng không sao)
-          try {
-            if (vid.srcObject) {
-              var tracks = vid.srcObject.getVideoTracks();
-              if (tracks && tracks[0] && tracks[0].applyConstraints) {
-                tracks[0].applyConstraints({ width: { ideal: 1280 }, height: { ideal: 720 } })
-                  .catch(function(){});
-              }
-            }
-          } catch (e) {}
-        }
-      }, 500);
-    }).catch(function() {
-      switchToCaptureMode();
-    });
+  // Tin nhắn nhóm (để copy dán vào nhóm Zalo phụ huynh)
+  var msg = '[ĐIỂM DANH ' + homNay + ']\n'
+    + 'Sĩ số: ' + siSo + ' | Có mặt: ' + soComat + ' | Vắng: ' + vang.length + '\n';
+  if (vang.length === 0) {
+    msg += 'Lớp đi học đầy đủ. Xin cảm ơn phụ huynh!';
+  } else {
+    msg += 'Học sinh vắng hôm nay:\n';
+    for (var k = 0; k < vang.length; k++) {
+      msg += '- ' + vang[k].ten + (vang[k].lop ? ' (' + vang[k].lop + ')' : '') + '\n';
+    }
+    msg += 'Kính mong phụ huynh phản hồi lý do. Xin cảm ơn!';
   }
 
-  // ── Khôi phục danh sách tạm nếu lỡ tải lại trang ──────────
-  (function khoiPhucPending() {
-    var saved;
-    try { saved = localStorage.getItem('pendingList'); } catch (e) {}
-    if (!saved) return;
-    var list;
-    try { list = JSON.parse(saved); } catch (e) { return; }
-    if (!list || !list.length) return;
-
-    pendingList = list;
-    for (var i = 0; i < list.length; i++) {
-      sessionSet[list[i]] = true;
-      addToSessionList(list[i], '(chưa lưu)');
+  // Danh sách vắng dạng HTML + nút Zalo từng phụ huynh
+  var dsVangHtml = '';
+  if (vang.length === 0) {
+    dsVangHtml = '<div class="full">🎉 Cả lớp đi học đầy đủ!</div>';
+  } else {
+    for (var m = 0; m < vang.length; m++) {
+      var v = vang[m];
+      var zalo = v.sdt ? '<a class="zalo" href="https://zalo.me/' + v.sdt + '" target="_blank">💬 Zalo PH</a>'
+                       : '<span class="nosdt">Chưa có SĐT</span>';
+      dsVangHtml += '<div class="hs">'
+        + '<div class="hs-info"><b>' + escHtmlGS(v.ten) + '</b>'
+        + (v.lop ? ' <span class="lop">' + escHtmlGS(v.lop) + '</span>' : '')
+        + '<div class="ma">' + escHtmlGS(v.ma) + (v.sdt ? ' · ' + escHtmlGS(v.sdt) : '') + '</div></div>'
+        + zalo + '</div>';
     }
-    capNhatNutLuu();
-    showToast('Đã khôi phục ' + list.length + ' mã chưa lưu', 'warn');
-  })();
+  }
 
-  // Hiện thẻ "Còn thiếu" ngay khi mở app
-  capNhatThieu();
+  var dest = returnUrl + (returnUrl.indexOf('?') >= 0 ? '&' : '?') + 'saved=' + justSaved;
 
-  // Tự khởi động nếu đã có URL
-  if (GAS_API_URL) { khoiDongScanner(); }
-</script>
-</body>
-</html>
+  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+    + '<title>Tổng kết điểm danh</title><style>'
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + 'body{background:#0f0f13;color:#e0e0e0;font-family:sans-serif;padding:20px 16px 40px;'
+    + 'display:flex;flex-direction:column;align-items:center;gap:16px}'
+    + 'h1{font-size:1.3rem;color:#fff;text-align:center}.date{color:#6b7280;font-size:0.85rem}'
+    + '.stats{display:flex;gap:10px;width:100%;max-width:420px}'
+    + '.stat{flex:1;background:#1a1a24;border:1px solid #2a2a3a;border-radius:12px;padding:12px;text-align:center}'
+    + '.stat .n{font-size:1.8rem;font-weight:800;line-height:1}.stat .l{font-size:0.7rem;color:#6b7280;text-transform:uppercase}'
+    + '.n.green{color:#00d4aa}.n.red{color:#ef4444}'
+    + '.card{width:100%;max-width:420px;background:#1a1a24;border:1px solid #2a2a3a;border-radius:14px;padding:16px}'
+    + '.card h2{font-size:0.78rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.05em;margin-bottom:10px}'
+    + '.hs{display:flex;justify-content:space-between;align-items:center;background:#111118;border-radius:8px;padding:10px 12px;margin-bottom:8px}'
+    + '.hs-info b{color:#fca5a5}.lop{font-size:0.72rem;color:#6b7280}.ma{font-size:0.72rem;color:#6b7280;margin-top:2px}'
+    + '.zalo{background:#0068ff;color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:0.8rem;font-weight:700;white-space:nowrap}'
+    + '.nosdt{font-size:0.72rem;color:#6b7280}.full{text-align:center;color:#00d4aa;padding:12px}'
+    + 'textarea{width:100%;height:130px;background:#111118;border:1px solid #2a2a3a;border-radius:8px;color:#e0e0e0;padding:10px;font-size:0.82rem;resize:none}'
+    + 'button{width:100%;background:#00d4aa;color:#0f0f13;border:none;border-radius:8px;padding:12px;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:10px}'
+    + 'a.back{display:inline-block;width:100%;max-width:420px;text-align:center;background:#1a1a24;border:1px solid #2a2a3a;color:#9ca3af;text-decoration:none;padding:14px;border-radius:12px;font-weight:700}'
+    + '</style></head><body>'
+    + '<h1>Tổng kết điểm danh</h1><div class="date">' + homNay + '</div>'
+    + '<div class="stats">'
+    +   '<div class="stat"><div class="n">' + siSo + '</div><div class="l">Sĩ số</div></div>'
+    +   '<div class="stat"><div class="n green">' + soComat + '</div><div class="l">Có mặt</div></div>'
+    +   '<div class="stat"><div class="n red">' + vang.length + '</div><div class="l">Vắng</div></div>'
+    + '</div>'
+    + '<div class="card"><h2>Học sinh vắng</h2>' + dsVangHtml + '</div>'
+    + '<div class="card"><h2>Tin nhắn báo nhóm Zalo phụ huynh</h2>'
+    +   '<textarea id="msg" readonly>' + escHtmlGS(msg) + '</textarea>'
+    +   '<button onclick="copyMsg()">📋 Copy tin nhắn</button></div>'
+    + '<a class="back" href="' + dest + '">← Quay lại điểm danh</a>'
+    + '<script>function copyMsg(){var t=document.getElementById("msg");t.select();'
+    + 'try{navigator.clipboard.writeText(t.value);}catch(e){document.execCommand("copy");}'
+    + 'event.target.textContent="✓ Đã copy - dán vào nhóm Zalo";}</script>'
+    + '</body></html>';
+
+  return HtmlService.createHtmlOutput(html).setTitle('Tổng kết điểm danh');
+}
+
+function taoTrangInQR() {
+  var sheet = getSheet('DanhSach');
+  if (!sheet) {
+    return HtmlService.createHtmlOutput('<p style="font-family:sans-serif;padding:20px;color:red">Không tìm thấy sheet "DanhSach". Hãy tạo sheet với cột A = Mã HS, cột B = Họ tên.</p>');
+  }
+
+  var rows = sheet.getDataRange().getValues();
+  var cards = '';
+  for (var i = 1; i < rows.length; i++) {   // bỏ dòng tiêu đề "Mã HS | Họ Tên"
+    var maHS  = String(rows[i][0]).trim();
+    var tenHS = String(rows[i][1]).trim();
+    if (!maHS) continue;
+
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(maHS);
+    cards += '<div class="card">'
+           +   '<img src="' + qrUrl + '" alt="QR ' + maHS + '" />'
+           +   '<div class="name">' + tenHS + '</div>'
+           +   '<div class="id">'   + maHS  + '</div>'
+           + '</div>';
+  }
+
+  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
+    + '<title>In mã QR học sinh</title>'
+    + '<style>'
+    + 'body{margin:0;padding:16px;font-family:sans-serif;background:#fff}'
+    + '@media print{.no-print{display:none}}'
+    + '.no-print{text-align:center;margin-bottom:16px}'
+    + '.no-print button{padding:10px 28px;font-size:1rem;background:#0f7b6c;color:#fff;border:none;border-radius:8px;cursor:pointer}'
+    + '.grid{display:flex;flex-wrap:wrap;gap:12px}'
+    + '.card{border:1px solid #ccc;border-radius:10px;padding:12px;width:160px;text-align:center;page-break-inside:avoid}'
+    + '.card img{width:140px;height:140px}'
+    + '.name{font-size:0.82rem;font-weight:600;margin-top:6px;line-height:1.3}'
+    + '.id{font-size:0.72rem;color:#666;margin-top:2px}'
+    + '</style></head><body>'
+    + '<div class="no-print"><button onclick="window.print()">🖨 In thẻ QR</button>'
+    + '&nbsp;&nbsp;<span style="font-size:0.85rem;color:#666">Tổng: ' + (rows.length) + ' học sinh</span></div>'
+    + '<div class="grid">' + cards + '</div>'
+    + '</body></html>';
+
+  return HtmlService.createHtmlOutput(html).setTitle('In mã QR học sinh');
+}
+
+// doPost: ghi sheet rồi trả về trang HTML postMessage kết quả về app
+// (qua mặt ITP của iOS Safari vì form POST là điều hướng, không phải fetch)
+function doPost(e) {
+  var maHS = '';
+  if (e.parameter && e.parameter.maHS) {
+    maHS = e.parameter.maHS;
+  } else if (e.postData && e.postData.contents) {
+    try { maHS = JSON.parse(e.postData.contents).maHS; } catch (err) {}
+  }
+
+  var obj = xuLyDiemDanh_obj(maHS);
+  var payload = JSON.stringify(obj);
+
+  var html = '<!DOCTYPE html><html><body><script>'
+    + 'try{parent.postMessage(' + JSON.stringify(payload) + ',"*");}catch(e){}'
+    + '</script>OK</body></html>';
+
+  return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// Hàm gọi từ google.script.run (khi HTML host trên GAS)
+function diemDanh(maHS) {
+  var maHS = (maHS || '').trim();
+  if (!maHS) return { success: false, message: 'Mã HS không hợp lệ.' };
+
+  var sheet = getSheet(SHEET_NAME);
+  if (!sheet) return { success: false, message: 'Không tìm thấy sheet "' + SHEET_NAME + '".' };
+
+  var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+  sheet.appendRow([timestamp, maHS]);
+
+  return { success: true, maHS: maHS, thoiGian: timestamp };
+}
+
+// Trả về object thuần (dùng cho cả JSON lẫn JSONP)
+function xuLyDiemDanh_obj(maHS) {
+  maHS = (maHS || '').trim();
+  if (!maHS) return { success: false, message: 'Mã HS không hợp lệ.' };
+
+  var sheet = getSheet(SHEET_NAME);
+  if (!sheet) return { success: false, message: 'Không tìm thấy sheet "' + SHEET_NAME + '".' };
+
+  var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+  sheet.appendRow([timestamp, maHS]);
+
+  return { success: true, maHS: maHS, thoiGian: timestamp };
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
