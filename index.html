@@ -372,24 +372,53 @@
       display: none;
       flex-direction: column;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       width: 100%;
     }
 
+    #btn-retry-camera {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #1a1a24;
+      color: #00d4aa;
+      border: 1px solid #00d4aa66;
+      border-radius: 10px;
+      padding: 13px 28px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      max-width: 280px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    #btn-retry-camera:active {
+      background: #0d2420;
+      border-color: #00d4aa;
+    }
+
+    .capture-divider {
+      font-size: 0.72rem;
+      color: #374151;
+      letter-spacing: 0.06em;
+    }
+
     .capture-icon {
-      width: 110px;
-      height: 110px;
+      width: 90px;
+      height: 90px;
       border-radius: 50%;
       background: #111118;
       border: 2px dashed #2a2a3a;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 2.8rem;
+      font-size: 2.2rem;
     }
 
     .capture-hint {
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       color: #6b7280;
       text-align: center;
       line-height: 1.6;
@@ -400,22 +429,21 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      background: #00d4aa;
-      color: #0f0f13;
+      background: #374151;
+      color: #e0e0e0;
       border: none;
       border-radius: 10px;
-      padding: 14px 28px;
-      font-size: 0.95rem;
-      font-weight: 700;
+      padding: 12px 24px;
+      font-size: 0.88rem;
+      font-weight: 600;
       cursor: pointer;
       width: 100%;
       max-width: 280px;
-      transition: background 0.2s, transform 0.1s;
+      transition: background 0.2s;
     }
 
     #capture-btn:active {
-      background: #00b894;
-      transform: scale(0.97);
+      background: #4b5563;
     }
 
     #qr-file-input {
@@ -664,10 +692,18 @@
 
       <!-- Fallback: chụp ảnh (hiện khi camera không khả dụng) -->
       <div id="capture-mode">
+
+        <!-- Nút thử lại camera — iOS cần user gesture để cấp quyền -->
+        <button id="btn-retry-camera" onclick="thuLaiCamera()">
+          🎥 Bật camera quét QR
+        </button>
+
+        <span class="capture-divider">— hoặc chụp ảnh —</span>
+
         <div class="capture-icon">📷</div>
         <p class="capture-hint">
-          Camera tự động không khả dụng.<br>
-          Nhấn nút để mở camera và chụp ảnh mã QR.
+          Camera tự động bị chặn.<br>
+          Bấm "Bật camera" để thử lại, hoặc chụp ảnh mã QR.
         </p>
         <button id="capture-btn" onclick="document.getElementById('qr-file-input').click()">
           📸 Chụp ảnh mã QR
@@ -1165,11 +1201,39 @@
       cameraStream = null;
     }
 
+    // Xoá video element cũ khỏi #reader (nếu có)
+    if (videoElement && videoElement.parentNode) {
+      videoElement.parentNode.removeChild(videoElement);
+    }
+    videoElement = null;
+
     document.getElementById('reader').style.display       = 'none';
     document.getElementById('capture-mode').style.display = 'flex';
-    modeLabelEl.textContent = 'Chụp ảnh mã QR';
-    setStatus('active', 'Sẵn sàng — nhấn nút để chụp');
+    modeLabelEl.textContent = 'Camera chưa sẵn sàng';
+    setStatus('error', 'Camera bị chặn — bấm "Bật camera" để thử lại');
     console.log('→ Capture mode');
+  }
+
+  // Thử lại camera sau khi đã có user gesture (tap)
+  // iOS Safari yêu cầu user gesture để cấp quyền camera
+  function thuLaiCamera() {
+    console.log('Thử lại camera (user gesture)…');
+
+    // Dọn dẹp trạng thái cũ
+    isScanning = false;
+    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+    if (cameraStream) { cameraStream.getTracks().forEach(function (t) { t.stop(); }); cameraStream = null; }
+    if (videoElement && videoElement.parentNode) { videoElement.parentNode.removeChild(videoElement); }
+    videoElement = null;
+
+    // Ẩn capture mode, hiện lại viewfinder
+    document.getElementById('capture-mode').style.display = 'none';
+    document.getElementById('reader').style.display       = 'block';
+    modeLabelEl.textContent = 'Camera quét mã QR';
+    setStatus('busy', 'Đang mở camera…');
+
+    // Gọi lại getUserMedia — lần này có user gesture → iOS cho phép
+    khoiDongCamera();
   }
 
   // Vòng lặp scan chạy liên tục qua requestAnimationFrame
