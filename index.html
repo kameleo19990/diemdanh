@@ -131,7 +131,7 @@
       position: absolute; inset: 0; pointer-events: none; z-index: 10;
       display: flex; align-items: center; justify-content: center;
     }
-    .aim-box { width: 56%; height: 56%; position: relative; }
+    .aim-box { width: 82%; height: 82%; position: relative; }
     .aim-box::before, .aim-box::after, .aim-box span::before, .aim-box span::after {
       content: ''; position: absolute; width: 22px; height: 22px;
       border-color: #00d4aa; border-style: solid;
@@ -236,7 +236,7 @@
   <header>
     <h1>Điểm Danh Học Sinh</h1>
     <p id="header-date"></p>
-    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v9-thieu</p>
+    <p style="font-size:0.7rem;color:#374151;margin-top:2px">Phiên bản v10-pan</p>
   </header>
 
   <div id="toast"></div>
@@ -356,7 +356,7 @@
   var scanCount    = 0;
   var dupCount     = 0;
   var lastRawCode  = '';
-  var cooldownMs   = 2000;
+  var cooldownMs   = 1000;
   var toastTimer   = null;
   var emptyMsgEl   = document.getElementById('empty-msg');
 
@@ -455,6 +455,33 @@
     }
   }
 
+  // ── Âm thanh "bíp" khi quét được (giúp lia camera không cần nhìn) ──
+  var audioCtx = null;
+  function moKhoaAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+  // iOS cần 1 lần chạm để bật âm thanh
+  document.addEventListener('touchstart', moKhoaAudio, { once: false });
+  document.addEventListener('click', moKhoaAudio, { once: false });
+
+  function beep(ok) {
+    try {
+      if (!audioCtx) return;
+      var o = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'sine';
+      o.frequency.value = ok ? 920 : 320;   // bắt mới: cao | trùng: thấp
+      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.13);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.13);
+    } catch (e) {}
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function showToast(msg, type) {
     toast.textContent = msg;
@@ -506,6 +533,7 @@
     addToSessionList(maHS, thoiGian + ' (chưa lưu)');
     showToast('✓ Đã quét: ' + maHS, 'success');
     setStatus('active', 'Sẵn sàng quét');
+    beep(true);
     capNhatNutLuu();
     capNhatThieu();
   }
@@ -537,6 +565,7 @@
     if (sessionSet[maHS]) {
       dupCount++;
       dupEl.textContent = dupCount;
+      beep(false);
       showToast('⚠ ' + maHS + ' đã điểm danh rồi!', 'warn');
       return;
     }
@@ -571,8 +600,8 @@
     html5QrCode.start(
       { facingMode: 'environment' },
       {
-        fps: 15,
-        qrbox: function(w,h){ var s=Math.min(w,h)*0.55; return {width:s,height:s}; },
+        fps: 25,                                    // quét nhanh hơn để lia camera
+        qrbox: function(w,h){ var s=Math.min(w,h)*0.82; return {width:s,height:s}; }, // vùng quét rộng
         aspectRatio: 1.0,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
       },
