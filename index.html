@@ -1,635 +1,186 @@
-// ── Hằng số toàn cục ─────────────────────────────────────────────────────────
-var SPREADSHEET_ID = '17Wa4WGeWqHIQLqiLrYxidwXWtrTwpDvnfBu00tdYwJU';
-var SHEET_DS       = 'DanhSach';
-var SHEET_LS       = 'LichSu';
-var SHEET_BC       = 'BaoCaoThiDua';
-
-// ── Menu ─────────────────────────────────────────────────────────────────────
-
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Cài đặt Điểm danh')
-    .addItem('⚙️ Tạo / Cập nhật các tab', 'setupSheets')
-    .addSeparator()
-    .addItem('🖨️ In mã QR học sinh',     'moTrangInQR')
-    .addItem('📊 Xem thống kê nghỉ học', 'moTrangThongKe')
-    .addToUi();
-}
-
-// ── Setup ─────────────────────────────────────────────────────────────────────
-
-/**
- * Tự động tạo 3 tab: DanhSach, LichSu, BaoCaoThiDua.
- * BaoCaoThiDua dùng SUMPRODUCT tự động thống kê theo TODAY() — không cần cập nhật thủ công.
- * Có thể chạy lại để reset cấu trúc BaoCaoThiDua mà không làm mất dữ liệu ở LichSu/DanhSach.
- */
-function setupSheets() {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var ui = SpreadsheetApp.getUi();
-
-  // ── 1. Tab DanhSach ────────────────────────────────────────────────────────
-  var dsSheet = ss.getSheetByName(SHEET_DS);
-  if (!dsSheet) {
-    dsSheet = ss.insertSheet(SHEET_DS);
-    dsSheet.appendRow(['Mã HS', 'Họ tên', 'Lớp', 'SĐT phụ huynh']);
-    dsSheet.getRange(1, 1, 1, 4)
-      .setFontWeight('bold')
-      .setBackground('#263238')
-      .setFontColor('#ffffff');
-    dsSheet.setFrozenRows(1);
-  }
-
-  // ── 2. Tab LichSu (3 cột) ─────────────────────────────────────────────────
-  var lsSheet = ss.getSheetByName(SHEET_LS);
-  if (!lsSheet) {
-    lsSheet = ss.insertSheet(SHEET_LS);
-  }
-  if (lsSheet.getLastRow() === 0) {
-    lsSheet.appendRow(['Thời gian', 'Mã HS', 'Trạng thái']);
-    lsSheet.getRange(1, 1, 1, 3)
-      .setFontWeight('bold')
-      .setBackground('#263238')
-      .setFontColor('#ffffff');
-    lsSheet.setFrozenRows(1);
-  }
-  lsSheet.getRange('A:A').setNumberFormat('dd/MM/yyyy HH:mm:ss');
-
-  // ── 3. Tab BaoCaoThiDua ───────────────────────────────────────────────────
-  var bcSheet = ss.getSheetByName(SHEET_BC);
-  if (!bcSheet) bcSheet = ss.insertSheet(SHEET_BC);
-  bcSheet.clearContents();
-
-  bcSheet.getRange(1, 1, 1, 5).setValues([[
-    'Mã HS', 'Họ tên', 'Số lần có mặt', 'Số lần phát biểu (+)', 'Số lần chưa chú ý (-)'
-  ]]);
-  bcSheet.getRange(1, 1, 1, 5)
-    .setFontWeight('bold')
-    .setBackground('#263238')
-    .setFontColor('#ffffff');
-  bcSheet.setFrozenRows(1);
-  bcSheet.setColumnWidth(1, 100);
-  bcSheet.setColumnWidth(2, 200);
-  bcSheet.setColumnWidth(3, 145);
-  bcSheet.setColumnWidth(4, 175);
-  bcSheet.setColumnWidth(5, 185);
-
-  // Công thức SUMPRODUCT cho tối đa 200 học sinh (hàng 2–201).
-  // Cột A, B kéo dữ liệu từ DanhSach; Cột C/D/E đếm từ LichSu theo TODAY().
-  var MAX_HS   = 200;
-  var lsA      = 'LichSu!$A$2:$A$2000';
-  var lsB      = 'LichSu!$B$2:$B$2000';
-  var lsC      = 'LichSu!$C$2:$C$2000';
-  var dateEq   = '(TEXT(' + lsA + ',"dd/MM/yyyy")=TEXT(TODAY(),"dd/MM/yyyy"))';
-  var formulas = [];
-
-  for (var r = 2; r <= MAX_HS + 1; r++) {
-    var a  = 'A' + r;
-    var ma = lsB + '=' + a;
-    formulas.push([
-      '=IF(DanhSach!A' + r + '="","",DanhSach!A' + r + ')',
-      '=IF(DanhSach!A' + r + '="","",DanhSach!B' + r + ')',
-      '=IF(' + a + '="","",SUMPRODUCT(' + dateEq + '*(' + ma + ')*(' + lsC + '="CÓ MẶT")))',
-      '=IF(' + a + '="","",SUMPRODUCT(' + dateEq + '*(' + ma + ')*(' + lsC + '="PHÁT BIỂU")))',
-      '=IF(' + a + '="","",SUMPRODUCT(' + dateEq + '*(' + ma + ')*(' + lsC + '="CHƯA CHÚ Ý")))'
-    ]);
-  }
-
-  bcSheet.getRange(2, 1, MAX_HS, 5).setFormulas(formulas);
-
-  SpreadsheetApp.flush();
-  ui.alert('✅ Hoàn tất!\n\nĐã thiết lập 3 tab:\n• DanhSach\n• LichSu (3 cột)\n• BaoCaoThiDua\n\nBaoCaoThiDua tự động tính theo ngày hôm nay.');
-}
-
-// ── Hàm trợ giúp: lấy / tạo sheet ───────────────────────────────────────────
-
-function getSheet(name) {
-  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    if (name === SHEET_LS) sheet.appendRow(['Thời gian', 'Mã HS', 'Trạng thái']);
-    if (name === SHEET_DS) sheet.appendRow(['Mã HS', 'Họ tên', 'Lớp', 'SĐT phụ huynh']);
-  }
-  return sheet;
-}
-
-// ── doGet: Xử lý GET request ─────────────────────────────────────────────────
-
-function doGet(e) {
-  var action = e.parameter && e.parameter.action;
-
-  if (action === 'batch')   return xuLyBatch(e.parameter.codes, e.parameter.returnUrl);
-  if (action === 'loadDS')  return trangTaiDanhSach(e.parameter.returnUrl);
-  if (action === 'inQR')    return taoTrangInQR();
-  if (action === 'thongKe') return taoTrangThongKe();
-
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('Điểm Danh Học Sinh')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-// ── doPost: Nhận JSON từ App (Global Mode) ────────────────────────────────────
-
-/**
- * App gửi POST với body là JSON mảng bản ghi:
- *   [{ "maHS": "HS001", "trangThai": "CÓ MẶT" }, ...]
- * hoặc object đơn lẻ:
- *   { "maHS": "HS001", "trangThai": "PHÁT BIỂU" }
- *
- * Giá trị Trạng thái hợp lệ: "CÓ MẶT" | "PHÁT BIỂU" | "CHƯA CHÚ Ý"
- * Bản ghi không hợp lệ mặc định về "CÓ MẶT".
- */
-function doPost(e) {
-  try {
-    // Hỗ trợ cả fetch (JSON body) lẫn Hidden Form (e.parameter.payload)
-    var jsonStr = (e.parameter && e.parameter.payload)
-               || (e.postData  && e.postData.contents)
-               || '[]';
-    var payload  = JSON.parse(jsonStr);
-    var records  = Array.isArray(payload) ? payload : [payload];
-    var lsSheet  = getSheet(SHEET_LS);
-    var now      = new Date();
-    var rows     = [];
-
-    var validStates = { 'CÓ MẶT': true, 'PHÁT BIỂU': true, 'CHƯA CHÚ Ý': true };
-
-    for (var i = 0; i < records.length; i++) {
-      var rec       = records[i];
-      var maHS      = String(rec.maHS      || '').trim();
-      var trangThai = String(rec.trangThai || 'CÓ MẶT').trim().toUpperCase();
-      if (!maHS) continue;
-      if (!validStates[trangThai]) trangThai = 'CÓ MẶT';
-      rows.push([now, maHS, trangThai]);
-    }
-
-    if (rows.length > 0) {
-      lsSheet
-        .getRange(lsSheet.getLastRow() + 1, 1, rows.length, 3)
-        .setValues(rows);
-      SpreadsheetApp.flush();
-    }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true, saved: rows.length }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-// ── Ghi batch mã HS → LichSu → trang tổng kết ───────────────────────────────
-
-function xuLyBatch(codesStr, returnUrl) {
-  var sheet = getSheet(SHEET_LS);
-  var codes = (codesStr || '').split(',');
-  var coMat = {};
-  var count = 0;
-  var now   = new Date();
-  var rows  = [];
-
-  for (var i = 0; i < codes.length; i++) {
-    var maHS = codes[i].trim();
-    if (!maHS) continue;
-    rows.push([now, maHS, 'CÓ MẶT']);
-    coMat[maHS] = true;
-    count++;
-  }
-
-  if (rows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 3).setValues(rows);
-    SpreadsheetApp.flush();
-  }
-
-  return trangTongKet(returnUrl, count, coMat);
-}
-
-// ── Tải danh sách lớp về App ─────────────────────────────────────────────────
-
-function trangTaiDanhSach(returnUrl) {
-  var ds  = getSheet(SHEET_DS).getDataRange().getValues();
-  var arr = [];
-  for (var j = 1; j < ds.length; j++) {
-    var ma = String(ds[j][0]).trim();
-    if (!ma) continue;
-    arr.push({ ma: ma, ten: String(ds[j][1] || '').trim() });
-  }
-
-  var dest = returnUrl + (returnUrl.indexOf('?') >= 0 ? '&' : '?')
-           + 'ds=' + encodeURIComponent(JSON.stringify(arr));
-
-  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
-    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>Tải danh sách</title><style>'
-    + 'body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;'
-    + 'justify-content:center;background:#0f0f13;color:#e0e0e0;font-family:sans-serif;'
-    + 'gap:20px;padding:24px;text-align:center}'
-    + '.ok{font-size:3rem}.big{font-size:1.2rem;font-weight:700;color:#00d4aa}'
-    + 'a.btn{display:inline-block;background:#00d4aa;color:#0f0f13;text-decoration:none;'
-    + 'padding:16px 32px;border-radius:12px;font-size:1.05rem;font-weight:700}'
-    + '</style></head><body>'
-    + '<div class="ok">📋</div>'
-    + '<div class="big">Đã tải ' + arr.length + ' học sinh</div>'
-    + '<a class="btn" href="' + dest + '">← Về app điểm danh</a>'
-    + '</body></html>';
-
-  return HtmlService.createHtmlOutput(html).setTitle('Tải danh sách lớp');
-}
-
-// ── Trang tổng kết sau điểm danh batch ───────────────────────────────────────
-
-function trangTongKet(returnUrl, justSaved, coMat) {
-  var tz     = Session.getScriptTimeZone();
-  var homNay = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy');
-  coMat = coMat || {};
-
-  var ds   = getSheet(SHEET_DS).getDataRange().getValues();
-  var vang = [];
-  var siSo = 0;
-
-  for (var j = 1; j < ds.length; j++) {
-    var maD = String(ds[j][0]).trim();
-    if (!maD) continue;
-    siSo++;
-    if (!coMat[maD]) {
-      vang.push({
-        ma:  maD,
-        ten: String(ds[j][1] || '').trim(),
-        lop: String(ds[j][2] || '').trim(),
-        sdt: chuanHoaSDT(ds[j][3])
-      });
-    }
-  }
-  var soCoMat = siSo - vang.length;
-
-  var msg = '[ĐIỂM DANH ' + homNay + ']\n'
-    + 'Sĩ số: ' + siSo + ' | Có mặt: ' + soCoMat + ' | Vắng: ' + vang.length + '\n';
-  if (vang.length === 0) {
-    msg += 'Lớp đi học đầy đủ! Xin cảm ơn phụ huynh.';
-  } else {
-    msg += 'Học sinh vắng hôm nay:\n';
-    for (var k = 0; k < vang.length; k++) {
-      msg += '- ' + vang[k].ten + (vang[k].lop ? ' (' + vang[k].lop + ')' : '') + '\n';
-    }
-    msg += 'Kính mong phụ huynh phản hồi lý do. Xin cảm ơn!';
-  }
-
-  var dsVangHtml = '';
-  var zaloData   = [];
-
-  if (vang.length === 0) {
-    dsVangHtml = '<div class="full">🎉 Cả lớp đi học đầy đủ!</div>';
-  } else {
-    for (var m = 0; m < vang.length; m++) {
-      var v     = vang[m];
-      var msgCN = 'Kính gửi phụ huynh em ' + v.ten
-        + (v.lop ? ' (lớp ' + v.lop + ')' : '')
-        + '. Hôm nay ' + homNay + ' em vắng học.'
-        + ' Kính mong phụ huynh cho biết lý do. Trân trọng cảm ơn!';
-      zaloData.push({ sdt: v.sdt, msg: msgCN });
-
-      var nutZalo = v.sdt
-        ? '<button class="zalo" onclick="guiZalo(' + m + ')">💬 Zalo</button>'
-        : '<span class="nosdt">Chưa có SĐT</span>';
-
-      dsVangHtml += '<div class="hs">'
-        + '<div class="hs-info"><b>' + escHtmlGS(v.ten) + '</b>'
-        + (v.lop ? ' <span class="lop">' + escHtmlGS(v.lop) + '</span>' : '')
-        + '<div class="ma">' + escHtmlGS(v.ma) + (v.sdt ? ' · ' + escHtmlGS(v.sdt) : '') + '</div>'
-        + '</div>' + nutZalo + '</div>';
-    }
-  }
-
-  var dest = returnUrl + (returnUrl.indexOf('?') >= 0 ? '&' : '?') + 'saved=' + justSaved;
-
-  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
-    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>Tổng kết điểm danh</title><style>'
-    + '*{box-sizing:border-box;margin:0;padding:0}'
-    + 'body{background:#0f0f13;color:#e0e0e0;font-family:sans-serif;padding:20px 16px 48px;'
-    + 'display:flex;flex-direction:column;align-items:center;gap:16px}'
-    + 'h1{font-size:1.3rem;color:#fff;text-align:center}'
-    + '.date{color:#6b7280;font-size:0.85rem}'
-    + '.stats{display:flex;gap:10px;width:100%;max-width:420px}'
-    + '.stat{flex:1;background:#1a1a24;border:1px solid #2a2a3a;border-radius:12px;padding:12px;text-align:center}'
-    + '.n{font-size:1.8rem;font-weight:800;line-height:1}.l{font-size:0.7rem;color:#6b7280;text-transform:uppercase}'
-    + '.n.g{color:#00d4aa}.n.r{color:#ef4444}'
-    + '.card{width:100%;max-width:420px;background:#1a1a24;border:1px solid #2a2a3a;border-radius:14px;padding:16px}'
-    + '.card h2{font-size:0.78rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.05em;margin-bottom:10px}'
-    + '.hs{display:flex;justify-content:space-between;align-items:center;'
-    + 'background:#111118;border-radius:8px;padding:10px 12px;margin-bottom:8px}'
-    + '.hs-info b{color:#fca5a5}.lop{font-size:0.72rem;color:#6b7280}'
-    + '.ma{font-size:0.72rem;color:#6b7280;margin-top:2px}'
-    + '.zalo{background:#0068ff;color:#fff;border:none;padding:8px 14px;border-radius:8px;'
-    + 'font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap}'
-    + '.nosdt{font-size:0.72rem;color:#6b7280}'
-    + '.full{text-align:center;color:#00d4aa;padding:12px}'
-    + 'textarea{width:100%;height:120px;background:#111118;border:1px solid #2a2a3a;'
-    + 'border-radius:8px;color:#e0e0e0;padding:10px;font-size:0.82rem;resize:none}'
-    + '.btn-copy{width:100%;background:#00d4aa;color:#0f0f13;border:none;border-radius:8px;'
-    + 'padding:12px;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:10px}'
-    + 'a.back{display:block;width:100%;max-width:420px;text-align:center;'
-    + 'background:#1a1a24;border:1px solid #2a2a3a;color:#9ca3af;text-decoration:none;'
-    + 'padding:14px;border-radius:12px;font-weight:700}'
-    + '</style></head><body>'
-    + '<h1>Tổng kết điểm danh</h1><div class="date">' + homNay + '</div>'
-    + '<div class="stats">'
-    + '<div class="stat"><div class="n">'   + siSo        + '</div><div class="l">Sĩ số</div></div>'
-    + '<div class="stat"><div class="n g">' + soCoMat     + '</div><div class="l">Có mặt</div></div>'
-    + '<div class="stat"><div class="n r">' + vang.length + '</div><div class="l">Vắng</div></div>'
-    + '</div>'
-    + '<div class="card"><h2>Học sinh vắng</h2>' + dsVangHtml + '</div>'
-    + '<div class="card"><h2>Tin nhắn báo nhóm Zalo phụ huynh</h2>'
-    + '<textarea id="msg" readonly>' + escHtmlGS(msg) + '</textarea>'
-    + '<button class="btn-copy" onclick="copyMsg()">📋 Copy tin nhắn</button></div>'
-    + '<a class="back" href="' + dest + '">← Quay lại điểm danh</a>'
-    + '<script id="zd" type="application/json">' + JSON.stringify(zaloData) + '<\/script>'
-    + '<script>'
-    + 'var Z=JSON.parse(document.getElementById("zd").textContent);'
-    + 'function copyMsg(){'
-    + 'var t=document.getElementById("msg");'
-    + 'try{navigator.clipboard.writeText(t.value).catch(function(){t.select();document.execCommand("copy");});}'
-    + 'catch(e){t.select();document.execCommand("copy");}'
-    + 'event.target.textContent="✓ Đã copy — dán vào nhóm Zalo";}'
-    + 'function guiZalo(i){'
-    + 'var z=Z[i];if(!z||!z.sdt){alert("Không có SĐT");return;}'
-    + 'var ta=document.createElement("textarea");'
-    + 'ta.value=z.msg;'
-    + 'ta.style.cssText="position:fixed;top:0;left:0;opacity:0;pointer-events:none";'
-    + 'document.body.appendChild(ta);ta.focus();ta.select();'
-    + 'try{document.execCommand("copy");}catch(e){}'
-    + 'document.body.removeChild(ta);'
-    + 'window.open("https://zalo.me/"+z.sdt,"_blank");}'
-    + '<\/script>'
-    + '</body></html>';
-
-  return HtmlService.createHtmlOutput(html).setTitle('Tổng kết điểm danh');
-}
-
-// ── In thẻ QR cho toàn bộ học sinh ──────────────────────────────────────────
-
-function taoTrangInQR() {
-  var rows  = getSheet(SHEET_DS).getDataRange().getValues();
-  var cards = '';
-  var count = 0;
-
-  for (var i = 1; i < rows.length; i++) {
-    var maHS  = String(rows[i][0]).trim();
-    var tenHS = String(rows[i][1] || '').trim();
-    if (!maHS) continue;
-    count++;
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&ecc=H&data='
-              + encodeURIComponent(maHS);
-    cards += '<div class="card">'
-           + '<img src="' + qrUrl + '" alt="' + escHtmlGS(maHS) + '" />'
-           + '<div class="name">' + escHtmlGS(tenHS) + '</div>'
-           + '<div class="id">'   + escHtmlGS(maHS)  + '</div>'
-           + '</div>';
-  }
-
-  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
-    + '<title>In mã QR học sinh</title><style>'
-    + 'body{margin:0;padding:16px;font-family:sans-serif;background:#fff}'
-    + '@media print{.no-print{display:none}}'
-    + '.no-print{text-align:center;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:16px}'
-    + '.no-print button{padding:10px 28px;font-size:1rem;background:#0f7b6c;color:#fff;border:none;border-radius:8px;cursor:pointer}'
-    + '.grid{display:flex;flex-wrap:wrap;gap:12px}'
-    + '.card{border:1px solid #ccc;border-radius:10px;padding:12px;width:240px;text-align:center;page-break-inside:avoid}'
-    + '.card img{width:220px;height:220px}'
-    + '.name{font-size:0.88rem;font-weight:600;margin-top:6px;line-height:1.3}'
-    + '.id{font-size:0.75rem;color:#666;margin-top:2px}'
-    + '</style></head><body>'
-    + '<div class="no-print">'
-    + '<button onclick="window.print()">🖨 In thẻ QR</button>'
-    + '<span style="font-size:0.85rem;color:#666">Tổng: ' + count + ' học sinh</span>'
-    + '</div>'
-    + '<div class="grid">' + cards + '</div>'
-    + '</body></html>';
-
-  return HtmlService.createHtmlOutput(html).setTitle('In mã QR học sinh');
-}
-
-// ── Thống kê số buổi nghỉ theo tháng ────────────────────────────────────────
-
-function taoTrangThongKe() {
-  var tz     = Session.getScriptTimeZone();
-  var homNay = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy');
-
-  var dsRows   = getSheet(SHEET_DS).getDataRange().getValues();
-  var students = [];
-  for (var i = 1; i < dsRows.length; i++) {
-    var ma = String(dsRows[i][0]).trim();
-    if (!ma) continue;
-    students.push({
-      ma:  ma,
-      ten: String(dsRows[i][1] || '').trim(),
-      lop: String(dsRows[i][2] || '').trim()
-    });
-  }
-  if (students.length === 0) {
-    return HtmlService.createHtmlOutput(
-      '<p style="font-family:sans-serif;padding:24px;color:#e0e0e0;background:#0f0f13;min-height:100vh">'
-      + 'Sheet "DanhSach" chưa có dữ liệu.</p>'
-    );
-  }
-
-  var lsRows       = getSheet(SHEET_LS).getDataRange().getValues();
-  var sessionDates = {};
-  var attended     = {};
-
-  for (var j = 1; j < lsRows.length; j++) {
-    var tsRaw     = lsRows[j][0];
-    var maHS      = String(lsRows[j][1] || '').trim();
-    var trangThai = String(lsRows[j][2] || '').trim();
-    if (!maHS || !tsRaw) continue;
-    // Chỉ tính buổi có mặt (CÓ MẶT hoặc bản ghi cũ không có trạng thái)
-    if (trangThai !== 'CÓ MẶT' && trangThai !== '') continue;
-
-    var dateStr, monthKey;
-    if (tsRaw instanceof Date) {
-      dateStr  = Utilities.formatDate(tsRaw, tz, 'dd/MM/yyyy');
-      monthKey = Utilities.formatDate(tsRaw, tz, 'MM/yyyy');
-    } else {
-      var parts = String(tsRaw).split(' ')[0].split('/');
-      if (parts.length < 3) continue;
-      dateStr  = parts[0] + '/' + parts[1] + '/' + parts[2];
-      monthKey = parts[1] + '/' + parts[2];
-    }
-
-    if (!sessionDates[monthKey])             sessionDates[monthKey] = {};
-    sessionDates[monthKey][dateStr] = true;
-
-    if (!attended[maHS])                     attended[maHS] = {};
-    if (!attended[maHS][monthKey])           attended[maHS][monthKey] = {};
-    attended[maHS][monthKey][dateStr] = true;
-  }
-
-  var months = Object.keys(sessionDates).sort(function(a, b) {
-    var pa = a.split('/'), pb = b.split('/');
-    var yd = parseInt(pa[1]) - parseInt(pb[1]);
-    return yd !== 0 ? yd : parseInt(pa[0]) - parseInt(pb[0]);
-  });
-
-  function countAbs(maHS, mk) {
-    var total = Object.keys(sessionDates[mk]).length;
-    var att   = (attended[maHS] && attended[maHS][mk])
-                ? Object.keys(attended[maHS][mk]).length : 0;
-    return total - att;
-  }
-  function totalAbs(maHS) {
-    var sum = 0;
-    for (var k = 0; k < months.length; k++) sum += countAbs(maHS, months[k]);
-    return sum;
-  }
-
-  var tongBuoi = 0;
-  for (var mb = 0; mb < months.length; mb++) {
-    tongBuoi += Object.keys(sessionDates[months[mb]]).length;
-  }
-
-  students.sort(function(a, b) { return totalAbs(b.ma) - totalAbs(a.ma); });
-
-  var thCols = '<th class="c-name">Họ tên</th>';
-  for (var mi = 0; mi < months.length; mi++) {
-    thCols += '<th class="c-month">' + months[mi].replace('/20', '/') + '</th>';
-  }
-  thCols += '<th class="c-tot">Tổng nghỉ</th>';
-
-  var trBuoi = '<td class="c-name lbl">Số buổi học</td>';
-  for (var mj = 0; mj < months.length; mj++) {
-    trBuoi += '<td class="c-month lbl">' + Object.keys(sessionDates[months[mj]]).length + '</td>';
-  }
-  trBuoi += '<td class="c-tot lbl">' + tongBuoi + '</td>';
-
-  var tableRows = '';
-  for (var s = 0; s < students.length; s++) {
-    var st    = students[s];
-    var tot   = totalAbs(st.ma);
-    var rowCl = tot >= 5 ? 'rd' : (tot >= 3 ? 'rw' : '');
-    var search = escHtmlGS((st.ten + ' ' + st.ma).toLowerCase());
-
-    var tds = '<td class="c-name">'
-            + '<div class="sn">' + escHtmlGS(st.ten) + '</div>'
-            + '<div class="si">' + escHtmlGS(st.ma)
-            + (st.lop ? ' · ' + escHtmlGS(st.lop) : '') + '</div>'
-            + '</td>';
-
-    for (var mk2 = 0; mk2 < months.length; mk2++) {
-      var abs = countAbs(st.ma, months[mk2]);
-      var acl = abs === 0 ? 'a0' : (abs <= 2 ? 'a1' : (abs <= 4 ? 'a2' : 'a3'));
-      tds += '<td class="c-month ' + acl + '">' + (abs === 0 ? '–' : abs) + '</td>';
-    }
-
-    var tcl = tot === 0 ? 't0' : (tot <= 3 ? 't1' : (tot <= 5 ? 't2' : 't3'));
-    tds += '<td class="c-tot ' + tcl + '">' + tot + '</td>';
-    tableRows += '<tr class="' + rowCl + '" data-s="' + search + '">' + tds + '</tr>';
-  }
-
-  var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">'
-    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>Thống kê nghỉ học</title><style>'
-    + '*{box-sizing:border-box;margin:0;padding:0}'
-    + 'body{background:#0f0f13;color:#e0e0e0;font-family:sans-serif;'
-    + 'min-height:100vh;padding:20px 0 60px;display:flex;flex-direction:column;'
-    + 'align-items:center;gap:14px}'
-    + 'h1{font-size:1.2rem;font-weight:700;color:#fff;text-align:center}'
-    + '.meta{font-size:0.75rem;color:#6b7280;text-align:center}'
-    + '.stats{display:flex;gap:8px;width:100%;max-width:500px;padding:0 14px}'
-    + '.stat{flex:1;background:#1a1a24;border:1px solid #2a2a3a;border-radius:10px;padding:10px 6px;text-align:center}'
-    + '.stat .n{font-size:1.6rem;font-weight:800;color:#00d4aa;line-height:1}'
-    + '.stat .l{font-size:0.62rem;color:#6b7280;text-transform:uppercase;margin-top:2px}'
-    + '.search{width:100%;max-width:500px;padding:0 14px}'
-    + '.search input{width:100%;padding:9px 13px;background:#1a1a24;border:1px solid #2a2a3a;'
-    + 'border-radius:8px;color:#e0e0e0;font-size:0.85rem;outline:none}'
-    + '.search input:focus{border-color:#00d4aa}'
-    + '.wrap{width:100%;max-width:500px;overflow-x:auto;padding:0 14px}'
-    + 'table{border-collapse:collapse;width:100%;min-width:max-content}'
-    + 'th{background:#111118;padding:7px 10px;font-size:0.68rem;text-transform:uppercase;'
-    + 'letter-spacing:.04em;color:#6b7280;border:1px solid #1e1e2a;white-space:nowrap}'
-    + 'td{padding:8px 10px;border:1px solid #1a1a24;font-size:0.82rem;white-space:nowrap}'
-    + '.c-name{text-align:left;min-width:140px;position:sticky;left:0;z-index:1;background:#0f0f13}'
-    + 'th.c-name{background:#111118;z-index:2}'
-    + '.c-month{text-align:center;min-width:50px}'
-    + '.c-tot{text-align:center;min-width:65px;font-weight:700}'
-    + '.lbl{color:#4b5563;font-size:0.72rem}'
-    + '.sn{font-weight:600;color:#e0e0e0;font-size:0.84rem}'
-    + '.si{font-size:0.67rem;color:#6b7280;margin-top:1px}'
-    + '.a0{color:#374151}.a1{color:#fbbf24}.a2{color:#f97316}.a3{color:#ef4444;font-weight:700}'
-    + '.t0{color:#374151}.t1{color:#fbbf24}.t2{color:#f97316;font-weight:700}.t3{color:#ef4444;font-weight:800}'
-    + 'tr.rw .c-name{border-left:3px solid #f97316}'
-    + 'tr.rd .c-name{border-left:3px solid #ef4444}'
-    + 'tbody tr:hover td{background:#1a1a28}'
-    + 'tbody tr:hover .c-name{background:#1a1a28}'
-    + '.legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:0.7rem;color:#6b7280;padding:0 14px}'
-    + '.leg{display:flex;align-items:center;gap:5px}'
-    + '.ld{width:8px;height:8px;border-radius:50%}'
-    + 'a.back{display:block;background:#1a1a24;border:1px solid #2a2a3a;color:#9ca3af;'
-    + 'text-decoration:none;padding:11px 24px;border-radius:10px;font-size:0.85rem;'
-    + 'font-weight:600;text-align:center;margin:0 14px}'
-    + '</style></head><body>'
-    + '<h1>📊 Thống kê nghỉ học</h1>'
-    + '<div class="meta">Tính đến ' + homNay + ' · Tổng ' + months.length + ' tháng · ' + tongBuoi + ' buổi</div>'
-    + '<div class="stats">'
-    +   '<div class="stat"><div class="n">' + students.length + '</div><div class="l">Học sinh</div></div>'
-    +   '<div class="stat"><div class="n">' + months.length   + '</div><div class="l">Tháng</div></div>'
-    +   '<div class="stat"><div class="n">' + tongBuoi        + '</div><div class="l">Buổi học</div></div>'
-    + '</div>'
-    + '<div class="search"><input type="search" placeholder="🔍 Tìm tên hoặc mã học sinh…" oninput="loc(this.value)"/></div>'
-    + '<div class="wrap"><table>'
-    +   '<thead><tr>' + thCols + '</tr><tr>' + trBuoi + '</tr></thead>'
-    +   '<tbody id="tb">' + tableRows + '</tbody>'
-    + '</table></div>'
-    + '<div class="legend">'
-    +   '<div class="leg"><div class="ld" style="background:#374151"></div>0 buổi nghỉ</div>'
-    +   '<div class="leg"><div class="ld" style="background:#fbbf24"></div>1–2 buổi</div>'
-    +   '<div class="leg"><div class="ld" style="background:#f97316"></div>3–4 buổi</div>'
-    +   '<div class="leg"><div class="ld" style="background:#ef4444"></div>5+ buổi</div>'
-    + '</div>'
-    + '<a class="back" href="javascript:history.back()">← Quay lại điểm danh</a>'
-    + '<script>'
-    + 'function loc(q){'
-    +   'q=q.toLowerCase().trim();'
-    +   'document.querySelectorAll("#tb tr").forEach(function(r){'
-    +     'r.style.display=(!q||r.dataset.s.indexOf(q)>=0)?"":"none";'
-    +   '});'
-    + '}'
-    + '<\/script>'
-    + '</body></html>';
-
-  return HtmlService.createHtmlOutput(html).setTitle('Thống kê nghỉ học');
-}
-
-// ── Mở dialog từ menu ────────────────────────────────────────────────────────
-
-function moTrangInQR() {
-  SpreadsheetApp.getUi().showModalDialog(
-    taoTrangInQR().setWidth(920).setHeight(660),
-    'In mã QR học sinh'
-  );
-}
-
-function moTrangThongKe() {
-  SpreadsheetApp.getUi().showModalDialog(
-    taoTrangThongKe().setWidth(620).setHeight(700),
-    'Thống kê nghỉ học'
-  );
-}
-
-// ── Tiện ích ─────────────────────────────────────────────────────────────────
-
-function escHtmlGS(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function chuanHoaSDT(sdt) {
-  var s = String(sdt || '').replace(/[^0-9]/g, '');
-  if (s.indexOf('84') === 0 && s.length >= 11) s = '0' + s.substring(2);
-  if (s.length < 10 || s.length > 12) return '';
-  return s;
-}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hệ thống Quản lý Lớp học QR</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
+        .header { width: 100%; background: #2c3e50; color: white; text-align: center; padding: 15px 0; font-size: 18px; font-weight: bold; }
+        
+        /* 3 Nút Chọn Chế Độ */
+        .mode-container { display: flex; justify-content: space-around; width: 100%; max-width: 500px; padding: 10px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn-mode { flex: 1; margin: 0 5px; padding: 12px 5px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; color: white; cursor: pointer; opacity: 0.4; transition: 0.3s; }
+        .btn-mode.active { opacity: 1; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        #btn-diemdanh { background-color: #3498db; }
+        #btn-phatbieu { background-color: #2ecc71; }
+        #btn-vipham { background-color: #e74c3c; }
+
+        /* Camera Area */
+        #reader { width: 100%; max-width: 500px; margin-top: 10px; border-radius: 10px; overflow: hidden; background: #000; }
+        
+        /* Danh sách đã quét */
+        .list-container { width: 90%; max-width: 500px; margin-top: 15px; background: white; border-radius: 10px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-grow: 1; overflow-y: auto; max-height: 250px;}
+        .list-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; font-size: 15px; }
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; color: white; }
+        .badge-diemdanh { background: #3498db; }
+        .badge-phatbieu { background: #2ecc71; }
+        .badge-vipham { background: #e74c3c; }
+
+        /* Nút Đồng Bộ & In QR */
+        .action-btns { display: flex; width: 90%; max-width: 500px; gap: 10px; margin: 15px 0; }
+        .btn-sync { flex: 2; padding: 15px; border: none; border-radius: 8px; background: #f39c12; color: white; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-print { flex: 1; padding: 15px; border: none; border-radius: 8px; background: #7f8c8d; color: white; font-size: 16px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="header">📋 TRỢ LÝ LỚP HỌC</div>
+
+    <!-- Bộ chuyển đổi chế độ -->
+    <div class="mode-container">
+        <button id="btn-diemdanh" class="btn-mode active" onclick="setMode('Có mặt', 'btn-diemdanh')">📌 Điểm danh</button>
+        <button id="btn-phatbieu" class="btn-mode" onclick="setMode('Phát biểu', 'btn-phatbieu')">⭐ Phát biểu</button>
+        <button id="btn-vipham" class="btn-mode" onclick="setMode('Chưa chú ý', 'btn-vipham')">⚠️ Chưa chú ý</button>
+    </div>
+
+    <!-- Camera -->
+    <div id="reader"></div>
+
+    <!-- Nút hành động -->
+    <div class="action-btns">
+        <button class="btn-sync" onclick="syncData()">⬆️ Đồng bộ lên Sheet</button>
+        <button class="btn-print" onclick="printQR()">🖨️ In mã QR</button>
+    </div>
+
+    <!-- Danh sách tạm thời -->
+    <div class="list-container" id="scannedList">
+        <div style="text-align: center; color: #7f8c8d; font-size: 13px;">Danh sách quét sẽ hiện ở đây...</div>
+    </div>
+
+    <!-- Âm thanh Bíp -->
+    <audio id="beepSound" src="https://www.soundjay.com/buttons/sounds/button-09.mp3" preload="auto"></audio>
+
+    <!-- FORM ẨN ĐỂ VƯỢT LỖI CORS TRÊN IOS -->
+    <form id="hiddenForm" method="POST" target="hidden_iframe" style="display:none;">
+        <input type="text" name="data" id="payloadInput">
+    </form>
+    <iframe name="hidden_iframe" style="display:none;" onload="iframeLoaded()"></iframe>
+
+    <script>
+        // === CẤU HÌNH LINK GOOGLE APPS SCRIPT CỦA THẦY VÀO ĐÂY ===
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbyzMHqZ4MEFVH9vFCCd1HKYJCiLC918qTOYjkym8TGLpvyyCI-hdivT-DyLJrXOczsYvQ/exec";
+
+        let currentMode = "Có mặt";
+        let records = []; 
+        let lastScanTime = {}; // Chống spam quét trùng trong 3 giây
+        let isSubmitting = false;
+
+        // Đổi chế độ quét
+        function setMode(modeName, btnId) {
+            currentMode = modeName;
+            document.querySelectorAll('.btn-mode').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(btnId).classList.add('active');
+        }
+
+        // Xử lý khi quét thành công
+        function onScanSuccess(decodedText, decodedResult) {
+            let now = Date.now();
+            
+            // Chống spam: Cùng 1 mã học sinh, phải cách nhau 3 giây mới được quét lại
+            if (lastScanTime[decodedText] && (now - lastScanTime[decodedText] < 3000)) {
+                return; 
+            }
+            lastScanTime[decodedText] = now;
+
+            // Kêu Bíp
+            document.getElementById('beepSound').play().catch(e => {});
+
+            // Đẩy vào mảng dữ liệu (Gửi cả Mã HS + Trạng thái)
+            records.push({ maHS: decodedText, trangThai: currentMode });
+            
+            // Cập nhật giao diện
+            updateUI();
+        }
+
+        function updateUI() {
+            const list = document.getElementById('scannedList');
+            if(records.length === 0) {
+                list.innerHTML = '<div style="text-align: center; color: #7f8c8d; font-size: 13px;">Danh sách quét sẽ hiện ở đây...</div>';
+                return;
+            }
+            
+            let html = '';
+            // Hiển thị từ mới nhất đến cũ nhất
+            for(let i = records.length - 1; i >= 0; i--) {
+                let badgeClass = records[i].trangThai === 'Có mặt' ? 'badge-diemdanh' : 
+                                 (records[i].trangThai === 'Phát biểu' ? 'badge-phatbieu' : 'badge-vipham');
+                
+                html += `<div class="list-item">
+                            <span><b>${records[i].maHS}</b></span>
+                            <span class="badge ${badgeClass}">${records[i].trangThai}</span>
+                         </div>`;
+            }
+            list.innerHTML = html;
+        }
+
+        // Tối ưu camera chạy liên tục không dừng (Global Mode)
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            { 
+                fps: 15, 
+                qrbox: function(windowWidth, windowHeight) {
+                    var size = Math.min(windowWidth, windowHeight) * 0.85;
+                    return { width: size, height: size };
+                },
+                videoConstraints: { facingMode: "environment", focusMode: "continuous" }
+            },
+            false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
+
+        // Gửi dữ liệu qua Hidden Form
+        function syncData() {
+            if (records.length === 0) {
+                alert("Chưa có học sinh nào được quét!");
+                return;
+            }
+            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) {
+                alert("Thầy chưa dán link Google Apps Script vào file Code!");
+                return;
+            }
+            
+            document.querySelector('.btn-sync').innerText = "⏳ Đang đồng bộ...";
+            isSubmitting = true;
+
+            // Đóng gói thành chuỗi JSON
+            document.getElementById('payloadInput').value = JSON.stringify(records);
+            
+            let form = document.getElementById('hiddenForm');
+            form.action = GAS_URL;
+            form.submit();
+        }
+
+        // Bắt sự kiện tải xong Form ẩn
+        function iframeLoaded() {
+            if(isSubmitting) {
+                alert("✅ Đồng bộ thành công " + records.length + " lượt!");
+                records = []; // Xóa trắng danh sách tạm
+                updateUI();
+                document.querySelector('.btn-sync').innerText = "⬆️ Đồng bộ lên Sheet";
+                isSubmitting = false;
+            }
+        }
+
+        // Nút In QR
+        function printQR() {
+            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) {
+                alert("Vui lòng cấu hình link Apps Script trước khi in QR.");
+                return;
+            }
+            window.open(GAS_URL + "?action=inQR", "_blank");
+        }
+    </script>
+</body>
+</html>
