@@ -8,7 +8,6 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
         .header { width: 100%; background: #2c3e50; color: white; text-align: center; padding: 15px 0; font-size: 18px; font-weight: bold; }
-        
         /* 3 Nút Chọn Chế Độ */
         .mode-container { display: flex; justify-content: space-around; width: 100%; max-width: 500px; padding: 10px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .btn-mode { flex: 1; margin: 0 5px; padding: 12px 5px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; color: white; cursor: pointer; opacity: 0.4; transition: 0.3s; }
@@ -16,10 +15,8 @@
         #btn-diemdanh { background-color: #3498db; }
         #btn-phatbieu { background-color: #2ecc71; }
         #btn-vipham { background-color: #e74c3c; }
-
         /* Camera Area */
         #reader { width: 100%; max-width: 500px; margin-top: 10px; border-radius: 10px; overflow: hidden; background: #000; }
-        
         /* Danh sách đã quét */
         .list-container { width: 90%; max-width: 500px; margin-top: 15px; background: white; border-radius: 10px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-grow: 1; overflow-y: auto; max-height: 250px;}
         .list-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; font-size: 15px; }
@@ -27,7 +24,6 @@
         .badge-diemdanh { background: #3498db; }
         .badge-phatbieu { background: #2ecc71; }
         .badge-vipham { background: #e74c3c; }
-
         /* Nút Đồng Bộ & In QR */
         .action-btns { display: flex; width: 90%; max-width: 500px; gap: 10px; margin: 15px 0; }
         .btn-sync { flex: 2; padding: 15px; border: none; border-radius: 8px; background: #f39c12; color: white; font-size: 16px; font-weight: bold; cursor: pointer; }
@@ -35,72 +31,52 @@
     </style>
 </head>
 <body>
-
     <div class="header">📋 TRỢ LÝ LỚP HỌC</div>
-
-    <!-- Bộ chuyển đổi chế độ -->
+    
     <div class="mode-container">
         <button id="btn-diemdanh" class="btn-mode active" onclick="setMode('Có mặt', 'btn-diemdanh')">📌 Điểm danh</button>
         <button id="btn-phatbieu" class="btn-mode" onclick="setMode('Phát biểu', 'btn-phatbieu')">⭐ Phát biểu</button>
         <button id="btn-vipham" class="btn-mode" onclick="setMode('Chưa chú ý', 'btn-vipham')">⚠️ Chưa chú ý</button>
     </div>
-
-    <!-- Camera -->
+    
     <div id="reader"></div>
-
-    <!-- Nút hành động -->
+    
     <div class="action-btns">
         <button class="btn-sync" onclick="syncData()">⬆️ Đồng bộ lên Sheet</button>
         <button class="btn-print" onclick="printQR()">🖨️ In mã QR</button>
     </div>
-
-    <!-- Danh sách tạm thời -->
+    
     <div class="list-container" id="scannedList">
         <div style="text-align: center; color: #7f8c8d; font-size: 13px;">Danh sách quét sẽ hiện ở đây...</div>
     </div>
-
-    <!-- Âm thanh Bíp -->
+    
     <audio id="beepSound" src="https://www.soundjay.com/buttons/sounds/button-09.mp3" preload="auto"></audio>
-
-    <!-- FORM ẨN ĐỂ VƯỢT LỖI CORS TRÊN IOS -->
     <form id="hiddenForm" method="POST" target="hidden_iframe" style="display:none;">
         <input type="text" name="data" id="payloadInput">
     </form>
     <iframe name="hidden_iframe" style="display:none;" onload="iframeLoaded()"></iframe>
-
+    
     <script>
-        // === CẤU HÌNH LINK GOOGLE APPS SCRIPT CỦA THẦY VÀO ĐÂY ===
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbyzMHqZ4MEFVH9vFCCd1HKYJCiLC918qTOYjkym8TGLpvyyCI-hdivT-DyLJrXOczsYvQ/exec";
+        // TẠM THỜI ĐỂ TRỐNG LINK APP SCRIPT, CHÚNG TA SẼ DÁN SAU
+        const GAS_URL = "DÁN_LINK_APPS_SCRIPT_CỦA_THẦY_VÀO_ĐÂY";
 
         let currentMode = "Có mặt";
         let records = []; 
-        let lastScanTime = {}; // Chống spam quét trùng trong 3 giây
+        let lastScanTime = {}; 
         let isSubmitting = false;
 
-        // Đổi chế độ quét
         function setMode(modeName, btnId) {
             currentMode = modeName;
             document.querySelectorAll('.btn-mode').forEach(btn => btn.classList.remove('active'));
             document.getElementById(btnId).classList.add('active');
         }
 
-        // Xử lý khi quét thành công
         function onScanSuccess(decodedText, decodedResult) {
             let now = Date.now();
-            
-            // Chống spam: Cùng 1 mã học sinh, phải cách nhau 3 giây mới được quét lại
-            if (lastScanTime[decodedText] && (now - lastScanTime[decodedText] < 3000)) {
-                return; 
-            }
+            if (lastScanTime[decodedText] && (now - lastScanTime[decodedText] < 3000)) return; 
             lastScanTime[decodedText] = now;
-
-            // Kêu Bíp
             document.getElementById('beepSound').play().catch(e => {});
-
-            // Đẩy vào mảng dữ liệu (Gửi cả Mã HS + Trạng thái)
             records.push({ maHS: decodedText, trangThai: currentMode });
-            
-            // Cập nhật giao diện
             updateUI();
         }
 
@@ -110,13 +86,10 @@
                 list.innerHTML = '<div style="text-align: center; color: #7f8c8d; font-size: 13px;">Danh sách quét sẽ hiện ở đây...</div>';
                 return;
             }
-            
             let html = '';
-            // Hiển thị từ mới nhất đến cũ nhất
             for(let i = records.length - 1; i >= 0; i--) {
                 let badgeClass = records[i].trangThai === 'Có mặt' ? 'badge-diemdanh' : 
                                  (records[i].trangThai === 'Phát biểu' ? 'badge-phatbieu' : 'badge-vipham');
-                
                 html += `<div class="list-item">
                             <span><b>${records[i].maHS}</b></span>
                             <span class="badge ${badgeClass}">${records[i].trangThai}</span>
@@ -125,36 +98,22 @@
             list.innerHTML = html;
         }
 
-        // Tối ưu camera chạy liên tục không dừng (Global Mode)
-        let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader",
-            { 
-                fps: 15, 
-                qrbox: function(windowWidth, windowHeight) {
-                    var size = Math.min(windowWidth, windowHeight) * 0.85;
-                    return { width: size, height: size };
-                },
-                videoConstraints: { facingMode: "environment", focusMode: "continuous" }
+        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+            fps: 15, 
+            qrbox: function(windowWidth, windowHeight) {
+                var size = Math.min(windowWidth, windowHeight) * 0.85;
+                return { width: size, height: size };
             },
-            false
-        );
+            videoConstraints: { facingMode: "environment", focusMode: "continuous" }
+        }, false);
         html5QrcodeScanner.render(onScanSuccess);
 
-        // Gửi dữ liệu qua Hidden Form
         function syncData() {
-            if (records.length === 0) {
-                alert("Chưa có học sinh nào được quét!");
-                return;
-            }
-            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) {
-                alert("Thầy chưa dán link Google Apps Script vào file Code!");
-                return;
-            }
+            if (records.length === 0) { alert("Chưa có học sinh nào được quét!"); return; }
+            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) { alert("Thầy chưa dán link Google Apps Script vào file Code!"); return; }
             
             document.querySelector('.btn-sync').innerText = "⏳ Đang đồng bộ...";
             isSubmitting = true;
-
-            // Đóng gói thành chuỗi JSON
             document.getElementById('payloadInput').value = JSON.stringify(records);
             
             let form = document.getElementById('hiddenForm');
@@ -162,23 +121,18 @@
             form.submit();
         }
 
-        // Bắt sự kiện tải xong Form ẩn
         function iframeLoaded() {
             if(isSubmitting) {
                 alert("✅ Đồng bộ thành công " + records.length + " lượt!");
-                records = []; // Xóa trắng danh sách tạm
+                records = []; 
                 updateUI();
                 document.querySelector('.btn-sync').innerText = "⬆️ Đồng bộ lên Sheet";
                 isSubmitting = false;
             }
         }
 
-        // Nút In QR
         function printQR() {
-            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) {
-                alert("Vui lòng cấu hình link Apps Script trước khi in QR.");
-                return;
-            }
+            if (!GAS_URL || GAS_URL.includes("DÁN_LINK")) { alert("Vui lòng cấu hình link Apps Script trước khi in QR."); return; }
             window.open(GAS_URL + "?action=inQR", "_blank");
         }
     </script>
